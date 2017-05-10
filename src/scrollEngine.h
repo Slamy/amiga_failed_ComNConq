@@ -1,0 +1,53 @@
+/*
+ * scrollEngine.h
+ *
+ *  Created on: 29.04.2017
+ *      Author: andre
+ */
+
+#ifndef SRC_SCROLLENGINE_H_
+#define SRC_SCROLLENGINE_H_
+
+
+//tatsächlich sichtbares Window
+#define SCREEN_WIDTH	320
+#define SCREEN_HEIGHT	256
+#define SCREEN_DEPTH	5
+
+#define EXTRA_TILES_HORIZONTAL		3
+#define EXTRA_TILES_VERTICAL		3
+#define EXTRA_PIXELS_HORIZONTAL		(EXTRA_TILES_HORIZONTAL*16)
+#define EXTRA_PIXELS_VERTICAL		(EXTRA_TILES_VERTICAL*16)
+
+#define EXTRA_FETCH_WORDS			1
+
+//Größe der Bitmap. Wichtig ist die Teilbarkeit durch 16.
+#define FRAMEBUFFER_WIDTH (SCREEN_WIDTH + EXTRA_PIXELS_HORIZONTAL)
+#define FRAMEBUFFER_HEIGHT (SCREEN_HEIGHT + EXTRA_PIXELS_VERTICAL)
+
+#define FRAMEBUFFER_PLANE_MODULO (EXTRA_PIXELS_HORIZONTAL/8)
+#define FRAMEBUFFER_LINE_MODULO (FRAMEBUFFER_PLANE_MODULO + (FRAMEBUFFER_WIDTH*(SCREEN_DEPTH-1))/8)
+
+#define FRAMEBUFFER_LINE_PITCH (FRAMEBUFFER_WIDTH*SCREEN_DEPTH/8)
+#define FRAMEBUFFER_PLANE_PITCH (FRAMEBUFFER_WIDTH/8)
+
+
+#define HORIZONTAL_SCROLL_WORDS 100 //für 100*16 extra Platz!
+
+#define FRAMEBUFFER_SIZE	(FRAMEBUFFER_WIDTH/8*FRAMEBUFFER_HEIGHT*SCREEN_DEPTH + HORIZONTAL_SCROLL_WORDS*2)
+
+
+#define LEVELMAP_HEIGHT 100
+#define LEVELMAP_WIDTH 100
+
+
+void scrollUp();
+void scrollDown();
+void scrollRight();
+void scrollLeft();
+void initVideo();
+void renderFullScreen();
+void constructCopperList();
+
+
+#endif /* SRC_SCROLLENGINE_H_ */
