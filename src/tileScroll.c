@@ -24,17 +24,39 @@
 #include "copper.h"
 #include "uart.h"
 
+#define KEYCODE_1 0x01
+#define KEYCODE_2 0x02
+#define KEYCODE_3 0x03
+#define KEYCODE_4 0x04
 
+#define KEYCODE_Q 0x10
 #define KEYCODE_W 0x11
+#define KEYCODE_E 0x12
+#define KEYCODE_I 0x17
+
 #define KEYCODE_A 0x20
 #define KEYCODE_S 0x21
 #define KEYCODE_D 0x22
 #define KEYCODE_G 0x24
 #define KEYCODE_H 0x25
+#define KEYCODE_J 0x26
+#define KEYCODE_K 0x27
+#define KEYCODE_L 0x28
+
+
+#define KEYCODE_NUM2	0x1E
+#define KEYCODE_NUM4	0x2D
+#define KEYCODE_NUM5	0x2E
+#define KEYCODE_NUM6	0x2F
+#define KEYCODE_NUM8	0x3E
+
+
+
 
 
 extern uint16_t *tilemapChip;
 uint8_t *chipMemMod=NULL;
+uint8_t *chipTestSoundEffect=NULL;
 extern uint16_t *bitmap;
 
 extern struct Custom custom;
@@ -45,6 +67,10 @@ extern unsigned char leveldata[];
 
 extern int scrollY;
 extern int scrollX;
+
+extern int debugVerticalScrollAmount;
+extern int debugHorizontalScrollAmount;
+
 
 void startDebugger() //stub function
 {
@@ -81,14 +107,34 @@ static inline void mt_init(void *mod)
 	     : "a0","a6","d0","a1","a2");
 }
 
-static inline void mt_mastervol(void)
+static inline void mt_mastervol(uint16_t masterVolume)
 {
 	//PTreplay Lautstärke auf 20 von 0 bis 64
-	asm (	"move.w #60,d0\n"
+	asm (	"move.w %[masterVolume],d0\n"
 			"jsr mt_mastervol\n"
 		 : //no outputs
-		 : //no inputs
+		 : [masterVolume] "irm" (masterVolume)
 		 : "d0");
+}
+
+
+static inline void mt_soundfx(void *samplePtr, uint16_t sampleLen, uint16_t samplePeriod, uint16_t sampleVolume)
+{
+	//PTreplay initialisiert
+	asm (	"move.w %[sampleLen],d0\n"
+			"move.w %[samplePeriod],d1\n"
+			"move.w %[sampleVolume],d2\n"
+			"lea %[custom],a6\n"
+			"move.l %[samplePtr],a0\n"
+			"jsr mt_soundfx"
+	     : //no outputs
+	     : [custom] "irm" (custom),
+		   [samplePtr] "irm" (samplePtr),
+		   [samplePeriod] "irm" (samplePeriod),
+		   [sampleVolume] "irm" (sampleVolume),
+		   [sampleLen] "irm" (sampleLen)
+
+	     : "a0","a6","d0","d2","d1");
 }
 
 
@@ -164,21 +210,122 @@ void mouseCheck()
 	mouseDataLast = mouseData;
 }
 
-#define SC_UP 1
-#define SC_RIGHT 2
-#define SC_DOWN 3
-#define SC_LEFT 4
+#define SC_END		0
+#define SC_UP		1
+#define SC_RIGHT	2
+#define SC_DOWN		3
+#define SC_LEFT		4
 
 
-unsigned char camMoveScript[]={
-	4+32,	SC_DOWN,
-	32+4,	SC_RIGHT,
-	32, 	SC_UP,
-	0, 		0
-};
+unsigned char camMoveScript[100];
+
 
 unsigned char *camMoveScriptPtr = camMoveScript;
 unsigned char camMoveScriptStepsTaken=0;
+
+void executeCamMoveScript()
+{
+	camMoveScriptPtr = camMoveScript;
+	while (*camMoveScriptPtr != SC_END)
+	{
+		switch (*camMoveScriptPtr)
+		{
+		case SC_LEFT:	scrollLeft(); break;
+		case SC_RIGHT:	scrollRight(); break;
+		case SC_UP:		scrollUp(); break;
+		case SC_DOWN:	scrollDown(); break;
+		}
+		camMoveScriptPtr++;
+	}
+}
+
+void initCamMoveScript()
+{
+	int i=0;
+	for(i=0;i<sizeof(camMoveScript);i++)
+	{
+		camMoveScript[i]=SC_END;
+	}
+}
+
+//Implementiere Tiefensuche
+void incrementCamMoveScript()
+{
+	camMoveScriptPtr = camMoveScript;
+
+	for(;;)
+	{
+		(*camMoveScriptPtr)++;
+		if (*camMoveScriptPtr > SC_LEFT)
+		{
+			*camMoveScriptPtr=1;
+			camMoveScriptPtr++;
+		}
+		else
+			return;
+	}
+}
+
+void printCamMoveScriptWord()
+{
+	camMoveScriptPtr = camMoveScript;
+	while (*camMoveScriptPtr != SC_END)
+	{
+		switch (*camMoveScriptPtr)
+		{
+		case SC_LEFT:	uart_printf("LEFT "); break;
+		case SC_RIGHT:	uart_printf("RIGHT "); break;
+		case SC_UP:		uart_printf("UP "); break;
+		case SC_DOWN:	uart_printf("DOWN "); break;
+		}
+		camMoveScriptPtr++;
+	}
+	//uart_printf("\n");
+}
+
+
+void printCamMoveScriptNumber()
+{
+	camMoveScriptPtr = camMoveScript;
+	while (*camMoveScriptPtr != SC_END)
+	{
+		uart_printf("%d",*camMoveScriptPtr);
+		camMoveScriptPtr++;
+	}
+	//uart_printf("\n");
+}
+
+void ScrollUnitTest()
+{
+	uint32_t i;
+
+	initCamMoveScript();
+	for(i=0; i < 16777216ULL;i++)
+	{
+		//printCamMoveScript();
+		scrollX=128*2;
+		scrollY=128*2;
+
+		renderFullScreen();
+
+		executeCamMoveScript();
+		int ret = verifyVisibleWindow();
+
+		if (ret)
+		{
+			//printCamMoveScriptNumber();
+			printCamMoveScriptWord();
+			uart_printf("  %d\n",ret);
+		}
+
+		if (ret)
+			break;
+		incrementCamMoveScript();
+
+	}
+	printCamMoveScriptNumber();
+	uart_printf(" on run %d\n",i);
+}
 
 void overtake()
 {
@@ -188,6 +335,9 @@ void overtake()
 	assert(tilemapChip);
 	chipMemMod = AllocMem(94848, MEMF_CHIP);
 	assert(chipMemMod);
+	chipTestSoundEffect = AllocMem(26262, MEMF_CHIP);
+	assert(testSoundEffect);
+
 
 	initVideo();
 	
@@ -310,6 +460,11 @@ void overtake()
 		chipMemMod[i] = protrackerModule_alien[i];
 	}
 
+	for (i=0 ; i<sizeof(testSoundEffect); i++)
+	{
+		chipTestSoundEffect[i] = testSoundEffect[i];
+	}
+
 	for (i=0 ; i<sizeof(tilemap)/2; i++)
 	{
 		tilemapChip[i] = tilemap[i];
@@ -318,12 +473,16 @@ void overtake()
 #if 0
 	mt_install_cia();
 	mt_init(chipMemMod);
-	mt_mastervol();
+	mt_mastervol(5);
 	
 	mt_Enable=1; //PTreplay darf abspielen
 #endif
 
 	vBlankCounterLast=vBlankCounter;
+
+	//Startposition
+	scrollX=128*2;
+	scrollY=128*2;
 
 	renderFullScreen();
 	constructCopperList();
@@ -354,6 +513,8 @@ void overtake()
 	}
 	*/
 
+	//ScrollUnitTest();
+
 	while(1)
 	{
 		//bitmap[vBlankCounter>>3]=0xFFFF;
@@ -380,45 +541,112 @@ void overtake()
 		{
 			switch (keyPress)
 			{
+			case KEYCODE_NUM8:
+				debugVerticalScrollAmount=-1;
+				uart_printf("debugVerticalScrollAmount=-1;\n");
+				keyPress=-1;
+				break;
+			case KEYCODE_NUM2:
+				debugVerticalScrollAmount=2;
+				uart_printf("debugVerticalScrollAmount=2;\n");
+				keyPress=-1;
+				break;
+			case KEYCODE_NUM4:
+				debugHorizontalScrollAmount=-1;
+				uart_printf("debugHorizontalScrollAmount=-1;\n");
+				keyPress=-1;
+				break;
+			case KEYCODE_NUM6:
+				debugHorizontalScrollAmount=2;
+				uart_printf("debugHorizontalScrollAmount=2;\n");
+				keyPress=-1;
+				break;
+			case KEYCODE_NUM5:
+				debugHorizontalScrollAmount=0;
+				debugVerticalScrollAmount=0;
+				uart_printf("debugScrollAmount disavled\n");
+
+				mt_soundfx(chipTestSoundEffect, sizeof(testSoundEffect)/2, 230, 64);
+				keyPress=-1;
+				break;
+
 			case KEYCODE_S:
 				scrollDown();
+				keyPress=-1;
 				break;
 			case KEYCODE_W:
 				scrollUp();
+				keyPress=-1;
 				break;
 			case KEYCODE_A:
 				scrollLeft();
+				keyPress=-1;
 				break;
 			case KEYCODE_D:
 				scrollRight();
+				keyPress=-1;
 				break;
 			case KEYCODE_G:
-				if (camMoveScriptPtr[0]!=0)
-				{
-					switch (camMoveScriptPtr[1])
-					{
-					case SC_LEFT: scrollLeft(); break;
-					case SC_RIGHT: scrollRight(); break;
-					case SC_UP: scrollUp(); break;
-					case SC_DOWN: scrollDown(); break;
-					}
-					camMoveScriptStepsTaken++;
-					if (camMoveScriptStepsTaken==camMoveScriptPtr[0])
-					{
-						camMoveScriptStepsTaken=0;
-						camMoveScriptPtr+=2;
-					}
-				}
+				uart_printf("ScrollUnitTest!\n");
+				ScrollUnitTest();
+				keyPress=-1;
 				break;
 			case KEYCODE_H:
-				scrollX=0;
-				scrollY=0;
-				renderFullScreen();
+				//renderFullScreen();
+				//alignOnTileBoundary();
+				if (verifyVisibleWindow())
+					uart_printf("Verify failed!\n");
+				else
+					uart_printf("Verify success!\n");
 				camMoveScriptPtr=camMoveScript;
+				keyPress=-1;
+				break;
+
+#if 0
+			case KEYCODE_K:
+				scrollDown();
+				break;
+			case KEYCODE_I:
+				scrollUp();
+				break;
+			case KEYCODE_J:
+				scrollLeft();
+				break;
+			case KEYCODE_L:
+				scrollRight();
+				break;
+#else
+			case KEYCODE_K:
+				for (i=0;i<16;i++)
+					scrollDown();
+				keyPress=-1;
+				break;
+			case KEYCODE_I:
+				for (i=0;i<16;i++)
+					scrollUp();
+				keyPress=-1;
+				break;
+			case KEYCODE_J:
+				for (i=0;i<16;i++)
+					scrollLeft();
+				keyPress=-1;
+				break;
+			case KEYCODE_L:
+				for (i=0;i<16;i++)
+					scrollRight();
+				keyPress=-1;
+				break;
+#endif
+
+			case KEYCODE_Q:
+				scrollDown();
+				scrollRight();
+				break;
+			case KEYCODE_E:
+				scrollLeft();
+				scrollUp();
 				break;
 			}
-
-			//keyPress=-1;
 		}
 
 #if 1
@@ -436,7 +664,6 @@ void overtake()
 				scrollUp();
 				toScrollY++;
 			}
-
 
 			if (toScrollX > 0)
 			{
@@ -501,7 +728,7 @@ void maustest()
 				mouseYDiff += 256;
 
 
-			printf("%d %d %d\n",mouseY,mouseYLast,mouseYDiff);
+			uart_printf("%d %d %d\n",mouseY,mouseYLast,mouseYDiff);
 
 			mouseYLast = mouseY;
 

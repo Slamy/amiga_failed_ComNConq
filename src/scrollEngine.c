@@ -86,6 +86,7 @@ struct ScreenColumnTile hiddenBlitColumnTop;
 struct ScreenColumnTile hiddenBlitColumnBottom;
 struct ScreenColumnTile hiddenBlitColumnCurrent;
 
+
 #define WRAPPED_TILE_MOVEPTR_DOWN(tile) \
 	tile.dest += FRAMEBUFFER_LINE_PITCH/2*16; \
 	if (tile.dest >= lastFetchWord) \
@@ -128,8 +129,21 @@ uint8_t *topLeftMapTile;
 
 #define DEBUG_VERTICAL_SCROLL	2
 #define DEBUG_HORIZONTAL_SCROLL	2
+//#define DEBUG_PRINT
 
-#define DEBUG_PRINT
+#ifdef DEBUG_VERTICAL_SCROLL
+int debugVerticalScrollAmount	= DEBUG_VERTICAL_SCROLL;
+#else
+int debugVerticalScrollAmount	= 0;
+#endif
+
+#ifdef DEBUG_HORIZONTAL_SCROLL
+int debugHorizontalScrollAmount	= DEBUG_HORIZONTAL_SCROLL;
+#else
+int debugHorizontalScrollAmount	= 0;
+#endif
+
+
 
 void constructCopperList()
 {
@@ -141,15 +155,16 @@ void constructCopperList()
 #ifdef DEBUG_VERTICAL_SCROLL
 	int backup_scrollYLine = scrollYLine;
 
-	scrollYLine+=(16*DEBUG_VERTICAL_SCROLL);
+	scrollYLine+=(16*debugVerticalScrollAmount);
 	if (scrollYLine >= FRAMEBUFFER_HEIGHT)
 		scrollYLine -= FRAMEBUFFER_HEIGHT;
-
+	if (scrollYLine < 0)
+		scrollYLine += FRAMEBUFFER_HEIGHT;
 #endif
 #ifdef DEBUG_HORIZONTAL_SCROLL
 	int backup_scrollXWord = scrollXWord;
 
-	scrollXWord+=DEBUG_HORIZONTAL_SCROLL;
+	scrollXWord+=debugHorizontalScrollAmount;
 #endif
 
 	//Sprites
@@ -378,7 +393,7 @@ void initVideo()
 static inline void blitTile(uint8_t tileid, uint16_t *dest)
 {
 	uint16_t *src = tilemapChip + SCREEN_DEPTH * 16 * tileid;
-
+#if 0
 	//uart_printf("b %p\n",dest);
 	custom.bltcon0 = BC0F_SRCA | A_TO_D | BC0F_DEST;
 	custom.bltapt = src;
@@ -390,11 +405,45 @@ static inline void blitTile(uint8_t tileid, uint16_t *dest)
 	custom.bltsize = ((5*16) << HSIZEBITS) | 1; //starts blitter. 16 x 16 Pixel
 
 	while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter
+#else
+	int i;
+	for (i=0; i<5*16; i++)
+	{
+		*dest = *src;
+		src++;
+		dest+=FRAMEBUFFER_WIDTH/16;
+	}
+#endif
+}
+
+static inline int verifyTile(uint8_t tileid, uint16_t *dest)
+{
+	uint16_t *src = tilemapChip + SCREEN_DEPTH * 16 * tileid;
+	int i;
+	for (i=0; i<5*16; i++)
+	{
+		if (*dest != *src)
+		{
+			uart_printf("verifyTile failed %d\n",i);
+			return 1;
+		}
+		src++;
+		dest+=FRAMEBUFFER_WIDTH/16;
+	}
+	return 0;
 }
 
 uint8_t scrollRightBlitFinished=0;
 uint8_t scrollLeftBlitFinished=0;
+uint8_t hiddenBlitColumnDirty=0;
+uint8_t upScrollDir=1;
+uint8_t leftScrollDir=0;
+uint8_t lastScrollStepLeft=0;
+uint16_t savedWord=0;
+uint16_t *savedWordPtr=0;
 
+
+//Das vertikale Scrolling erstreckt sich über die gesamte Zeile.
 void scrollUp()
 {
 	int i;
@@ -414,6 +463,13 @@ void scrollUp()
 	if (scrollYLine < 0)
 		scrollYLine = FRAMEBUFFER_HEIGHT-1;
 
+	if ((scrollY & 0xf)==0)
+	{
+#ifdef DEBUG_PRINT
+		uart_printf("(scrollY & 0xf)==0\n");
+#endif
+	}
+
 	if ((scrollY & 0xf)==0xf)
 	{
 #ifdef DEBUG_PRINT
@@ -423,10 +479,7 @@ void scrollUp()
 		topLeftMapTile -= LEVELMAP_WIDTH;
 
 		WRAPPED_TILE_MOVEPTR_UP(hiddenBlitRowLeft)
-
-		hiddenBlitRowRight.dest = hiddenBlitRowLeft.dest + 21;
-		hiddenBlitRowRight.scrollDownTile = hiddenBlitRowLeft.scrollDownTile + 21;
-		hiddenBlitRowRight.scrollUpTile = hiddenBlitRowLeft.scrollUpTile + 21;
+		WRAPPED_TILE_MOVEPTR_UP(hiddenBlitRowRight)
 
 		hiddenBlitRowCurrent.dest = hiddenBlitRowRight.dest + 1;
 		hiddenBlitRowCurrent.scrollDownTile = hiddenBlitRowRight.scrollDownTile + 1;
@@ -435,12 +488,74 @@ void scrollUp()
 
 		//blitTile(*hiddenBlitColumnTop.scrollRightTile, hiddenBlitColumnTop.dest);
 
+		//if (!scrollRightBlitFinished && (scrollX&0xf))
+
 		WRAPPED_TILE_MOVEPTR_UP(hiddenBlitColumnTop);
 		WRAPPED_TILE_MOVEPTR_UP(hiddenBlitColumnBottom);
 		WRAPPED_TILE_MOVEPTR_UP(hiddenBlitColumnCurrent);
 
-		if (!scrollRightBlitFinished)
-			blitTile(*hiddenBlitColumnCurrent.scrollRightTile, hiddenBlitColumnCurrent.dest);
+#if 0
+		if (hiddenBlitColumnDirty)
+		{
+			//Wenn ein Scrolling im gange ist, müssen wir das partiell gescrollte Verschieben
+			uart_printf("Blitte hiddenBlitColumnCurrent\n");
+			blitTile(*hiddenBlitColumnCurrent.scrollLeftTile, hiddenBlitColumnCurrent.dest - FRAMEBUFFER_PLANE_PITCH/2);
+			blitTile(*hiddenBlitColumnTop.scrollRightTile, hiddenBlitColumnTop.dest);
+		}
+		else
+		{
+			//Wenn nicht, ist in der Hidden Spalte etwas fürs nach links scrollen
+			blitTile(*hiddenBlitColumnTop.scrollLeftTile, hiddenBlitColumnTop.dest - FRAMEBUFFER_PLANE_PITCH/2);
+		}
+#endif
+
+		//Wenn auf der Spalte gearbeitet wird, führe die aktuelle Position grafisch nach.
+		if (hiddenBlitColumnDirty && !scrollRightBlitFinished)
+		{
+			//Wenn ein Scrolling im gange ist, müssen wir das partiell gescrollte Verschieben
+#ifdef DEBUG_PRINT
+			uart_printf("Blitte hiddenBlitColumnCurrent\n");
+#endif
+			blitTile(*hiddenBlitColumnCurrent.scrollLeftTile, hiddenBlitColumnCurrent.dest - FRAMEBUFFER_PLANE_PITCH/2);
+			//blitTile(*hiddenBlitColumnTop.scrollLeftTile, hiddenBlitColumnTop.dest);
+		}
+
+		//Wenn auf der Spalte gearbeitet wird, führe die unten die Links Scroll-Richtung nach.
+		//Tue dies aber nur, wenn kein abgeschlossener RightBlitVorgang vorliegt.
+		//Ansonsten würde die Spalte wieder zerstört werden
+#ifdef DEBUG_PRINT
+		uart_printf("State %d %d %d\n", hiddenBlitColumnDirty, scrollLeftBlitFinished,scrollRightBlitFinished);
+#endif
+
+		if (hiddenBlitColumnDirty && !scrollLeftBlitFinished)
+		{
+			if (leftScrollDir)
+			{
+#ifdef DEBUG_PRINT
+				uart_printf("Blit Left %d\n",__LINE__);
+#endif
+				blitTile(*hiddenBlitColumnTop.scrollLeftTile, hiddenBlitColumnTop.dest);
+			}
+			else
+			{
+#ifdef DEBUG_PRINT
+				uart_printf("Blit Right %d\n",__LINE__);
+#endif
+				blitTile(*hiddenBlitColumnTop.scrollRightTile, hiddenBlitColumnTop.dest);
+			}
+		}
+		else if ((scrollX & 0xf)==0) //Aber wenn wir auf Kante sind, müssen wir das eigentlich auch tun O.o
+		{
+			blitTile(*hiddenBlitColumnTop.scrollLeftTile, hiddenBlitColumnTop.dest - FRAMEBUFFER_PLANE_PITCH/2);
+		}
+		else
+		{
+#ifdef DEBUG_PRINT
+			uart_printf("Nehme keinen hiddenBlitColumnTop blit vor... %d %d %d\n",hiddenBlitColumnDirty, scrollLeftBlitFinished , scrollRightBlitFinished);
+#endif
+		}
+
+		upScrollDir=1;
 
 	}
 
@@ -501,10 +616,7 @@ void scrollDown()
 
 		//Verschieben der hiddenBlitRow, um eine Zeile nach unten
 		WRAPPED_TILE_MOVEPTR_DOWN(hiddenBlitRowLeft);
-
-		hiddenBlitRowRight.dest = hiddenBlitRowLeft.dest + 21;
-		hiddenBlitRowRight.scrollDownTile = hiddenBlitRowLeft.scrollDownTile + 21;
-		hiddenBlitRowRight.scrollUpTile = hiddenBlitRowLeft.scrollUpTile + 21;
+		WRAPPED_TILE_MOVEPTR_DOWN(hiddenBlitRowRight);
 
 		hiddenBlitRowCurrent = hiddenBlitRowLeft;
 
@@ -518,40 +630,42 @@ void scrollDown()
 		uart_printf("Verschiebe auch hiddenBlitColumnCurrentDest nach unten\n");
 #endif
 
-		if (!scrollRightBlitFinished)
+
+		//Wenn auf der Spalte gearbeitet wird, führe die aktuelle Position grafisch nach.
+		if (hiddenBlitColumnDirty)
 		{
+			//Wenn ein Scrolling im gange ist, müssen wir das partiell gescrollte Verschieben
+#ifdef DEBUG_PRINT
+			uart_printf("Blitte hiddenBlitColumnCurrent\n");
+#endif
 			blitTile(*hiddenBlitColumnCurrent.scrollRightTile, hiddenBlitColumnCurrent.dest);
-			blitTile(*hiddenBlitColumnBottom.scrollRightTile, hiddenBlitColumnBottom.dest);
-		}
-		else
-		{
-			/*
-			uint16_t* temp = hiddenBlitColumnBottom.dest - FRAMEBUFFER_LINE_PITCH/2*16;
-
-			if (temp < firstFetchWord)
-					temp += FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
-
-			blitTile(7, temp);
-			*/
+			//blitTile(*hiddenBlitColumnTop.scrollLeftTile, hiddenBlitColumnTop.dest);
 		}
 
 		WRAPPED_TILE_MOVEPTR_DOWN(hiddenBlitColumnCurrent);
 		WRAPPED_TILE_MOVEPTR_DOWN(hiddenBlitColumnTop);
 		WRAPPED_TILE_MOVEPTR_DOWN(hiddenBlitColumnBottom);
 
-		if (scrollRightBlitFinished)
+		//Wenn auf der Spalte gearbeitet wird, führe die unten die Links Scroll-Richtung nach.
+		//Tue dies aber nur, wenn kein abgeschlossener RightBlitVorgang vorliegt.
+		//Ansonsten würde die Spalte wieder zerstört werden
+		if (hiddenBlitColumnDirty && !scrollRightBlitFinished)
 		{
-			blitTile(*hiddenBlitColumnBottom.scrollRightTile, hiddenBlitColumnBottom.dest);
+			blitTile(*hiddenBlitColumnBottom.scrollLeftTile, hiddenBlitColumnBottom.dest - FRAMEBUFFER_PLANE_PITCH/2);
+		}
+		else if ((scrollX & 0xf)==0) //Aber wenn wir auf Kante sind, müssen wir das eigentlich auch tun O.o
+		{
+			//blitTile(*hiddenBlitColumnBottom.scrollLeftTile, hiddenBlitColumnBottom.dest - FRAMEBUFFER_PLANE_PITCH/2);
 		}
 
 		/*
-		uint16_t *tilePtr = tilemapChip + SCREEN_DEPTH * 16 * (*hiddenBlitColumnTop.scrollRightTile);
-		blitTile(tilePtr, hiddenBlitColumnTop.dest);
-
-		tilePtr = tilemapChip + SCREEN_DEPTH * 16 * (*hiddenBlitColumnBottom.scrollRightTile);
-		blitTile(tilePtr, hiddenBlitColumnBottom.dest);
+		if (scrollRightBlitFinished && (scrollX&0xf))
+		{
+			blitTile(*hiddenBlitColumnBottom.scrollRightTile, hiddenBlitColumnBottom.dest);
+		}
 		*/
-
+		//blitTile(*hiddenBlitColumnBottom.scrollLeftTile, hiddenBlitColumnBottom.dest - FRAMEBUFFER_PLANE_PITCH/2);
+		upScrollDir=0;
 	}
 
 	//Bei jedem Scroll-Vorgang um einen Pixel ist es bei 22 Tiles in der Breite sinnvoll, direkt 2 Tiles zu zeichnen.
@@ -571,6 +685,12 @@ void scrollDown()
 				hiddenBlitRowCurrent.dest++;
 				hiddenBlitRowCurrent.scrollDownTile++;
 				hiddenBlitRowCurrent.scrollUpTile++;
+			}
+			else
+			{
+#ifdef DEBUG_PRINT
+				uart_printf("hiddenBlitRowCurrent.dest > hiddenBlitRowRight.dest\n");
+#endif
 			}
 		}
 	}
@@ -597,8 +717,15 @@ void scrollLeft()
 
 	custom.color[0] = 0x0FFF;
 
-
 	scrollX--;
+
+	if (savedWordPtr && lastScrollStepLeft==0)
+	{
+		*savedWordPtr=savedWord;
+		//uart_printf("Korrigiere\n");
+	}
+
+	lastScrollStepLeft=1;
 
 	//Umsetzung von scrollXDelay nach Word scrolling.
 	scrollXDelay++;
@@ -611,6 +738,10 @@ void scrollLeft()
 
 	if ((scrollX & 0xf)==0xf)
 	{
+#ifdef DEBUG_PRINT
+		uart_printf("if ((scrollX & 0xf)==0xf)\n");
+#endif
+
 		topLeftMapTile--;
 		lastFetchWord--;
 		firstFetchWord--;
@@ -620,28 +751,50 @@ void scrollLeft()
 		TILE_MOVEPTR_LEFT(hiddenBlitColumnCurrent);
 
 
+		hiddenBlitColumnCurrent = hiddenBlitColumnBottom;
+		WRAPPED_TILE_MOVEPTR_DOWN(hiddenBlitColumnCurrent);
+
+		/*
 		hiddenBlitColumnCurrent.dest = hiddenBlitColumnBottom.dest + FRAMEBUFFER_LINE_PITCH/2*16;
 		hiddenBlitColumnCurrent.scrollRightTile = hiddenBlitColumnBottom.scrollRightTile + LEVELMAP_WIDTH;
 		hiddenBlitColumnCurrent.scrollLeftTile = hiddenBlitColumnBottom.scrollLeftTile + LEVELMAP_WIDTH;
-
-
-		/*
-		if (hiddenBlitRowCurrent.dest > hiddenBlitRowLeft.dest)
-			blitTile(*hiddenBlitRowCurrent.scrollDownTile, hiddenBlitRowCurrent.dest);
 		*/
 
+		//Führe den Zwischenstand der Spalte mit, falls darauf gearbeitet wird.
+
+		//blitTile(*hiddenBlitRowRight.scrollDownTile, hiddenBlitRowRight.dest - FRAMEBUFFER_PLANE_PITCH/2 );
+
+		//if (hiddenBlitRowCurrent.dest <= hiddenBlitRowRight.dest && (scrollY&0xf))
 		TILE_MOVEPTR_LEFT(hiddenBlitRowLeft);
 		TILE_MOVEPTR_LEFT(hiddenBlitRowRight);
 		TILE_MOVEPTR_LEFT(hiddenBlitRowCurrent);
 
-		//blitTile(*hiddenBlitRowRight.scrollUpTile, hiddenBlitRowRight.dest);
+		if (hiddenBlitRowCurrent.dest > hiddenBlitRowLeft.dest && (scrollY&0xf) && hiddenBlitRowCurrent.dest <= hiddenBlitRowRight.dest)
+		{
+			blitTile(*hiddenBlitRowCurrent.scrollUpTile, hiddenBlitRowCurrent.dest);
+			//uart_printf("hiddenBlitRowCurrent beim scrollLeft mitführen\n");
+		}
 
-		scrollRightBlitFinished=0;
+
+		if (hiddenBlitRowCurrent.dest > hiddenBlitRowLeft.dest && hiddenBlitRowCurrent.dest <= hiddenBlitRowRight.dest)
+		{
+			if (upScrollDir)
+			{
+				blitTile(*hiddenBlitRowLeft.scrollUpTile, hiddenBlitRowLeft.dest);
+			}
+			else
+			{
+				blitTile(*hiddenBlitRowLeft.scrollDownTile, hiddenBlitRowLeft.dest);
+			}
+		}
+
 		scrollLeftBlitFinished=0;
+		hiddenBlitColumnDirty=0;
+		leftScrollDir=1;
 	}
 
 
-	if ((scrollY & 0xf) < 0xf)
+	if ((scrollX & 0xf) < 0xf)
 	{
 		for (i=0;i<2;i++) //2 Tiles gleichzeitig
 		{
@@ -649,25 +802,24 @@ void scrollLeft()
 			{
 #ifdef DEBUG_PRINT
 				//uart_printf("hiddenBlitColumnCurrentDest %x\n",hiddenBlitColumnCurrent.dest);
-				//uart_printf("hiddenBlitColumnBottom %x\n",hiddenBlitColumnBottom.dest);
+				//uart_printf("hiddenBlitColumnBottom %x\n",hiddenBlitColumnTop.dest + FRAMEBUFFER_LINE_PITCH/2*16);
+				uart_printf("Blit tile : %d %d\n",(hiddenBlitColumnCurrent.scrollLeftTile-mapData)/LEVELMAP_WIDTH,(hiddenBlitColumnCurrent.scrollLeftTile-mapData)%LEVELMAP_WIDTH);
 #endif
+				WRAPPED_TILE_MOVEPTR_UP(hiddenBlitColumnCurrent);
 
 				if (hiddenBlitColumnCurrent.dest == hiddenBlitColumnTop.dest)
 				{
 					scrollLeftBlitFinished=1;
 #ifdef DEBUG_PRINT
-					uart_printf("scrollRightBlitFinished=1;\n");
+					uart_printf("scrollLeftBlitFinished=1;\n");
 #endif
 				}
 
-
-#ifdef DEBUG_PRINT
-				uart_printf("Blit tile : %d %d\n",(hiddenBlitColumnCurrent.scrollLeftTile-mapData)/LEVELMAP_WIDTH,(hiddenBlitColumnCurrent.scrollLeftTile-mapData)%LEVELMAP_WIDTH);
-#endif
-				WRAPPED_TILE_MOVEPTR_UP(hiddenBlitColumnCurrent);
+				savedWordPtr = hiddenBlitColumnCurrent.dest - FRAMEBUFFER_PLANE_PITCH/2;
+				savedWord = *savedWordPtr;
 
 				blitTile(*hiddenBlitColumnCurrent.scrollLeftTile, hiddenBlitColumnCurrent.dest - FRAMEBUFFER_PLANE_PITCH/2);
-
+				hiddenBlitColumnDirty=1;
 				scrollRightBlitFinished=0;
 
 			}
@@ -690,6 +842,11 @@ void scrollLeft()
 void scrollRight()
 {
 	int i;
+
+#ifdef DEBUG_PRINT
+	uart_printf("%s %d %d\n",__func__,scrollX, scrollXDelay);
+#endif
+
 #if 1
 	if (scrollX == HORIZONTAL_SCROLL_WORDS*16)
 		return;
@@ -697,6 +854,14 @@ void scrollRight()
 	custom.color[0] = 0x0FFF;
 
 	scrollX++;
+
+	if (savedWordPtr && lastScrollStepLeft==1)
+	{
+		*savedWordPtr=savedWord;
+		//uart_printf("Korrigiere\n");
+	}
+
+	lastScrollStepLeft=0;
 
 	//Umsetzung von scrollXDelay nach Word scrolling.
 	scrollXDelay--;
@@ -723,19 +888,27 @@ void scrollRight()
 		hiddenBlitColumnCurrent = hiddenBlitColumnTop;
 
 
-		if (hiddenBlitRowCurrent.dest > hiddenBlitRowLeft.dest)
+		if (hiddenBlitRowCurrent.dest > hiddenBlitRowLeft.dest  && (scrollY&0xf) && hiddenBlitRowCurrent.dest <= hiddenBlitRowRight.dest)
 			blitTile(*hiddenBlitRowCurrent.scrollDownTile, hiddenBlitRowCurrent.dest);
-
 
 		TILE_MOVEPTR_RIGHT(hiddenBlitRowLeft);
 		TILE_MOVEPTR_RIGHT(hiddenBlitRowRight);
 		TILE_MOVEPTR_RIGHT(hiddenBlitRowCurrent);
 
-		if (hiddenBlitRowCurrent.dest <= hiddenBlitRowRight.dest)
-			blitTile(*hiddenBlitRowRight.scrollUpTile, hiddenBlitRowRight.dest);
+		if (hiddenBlitRowCurrent.dest <= hiddenBlitRowRight.dest )
+		{
 
+			if (upScrollDir)
+				blitTile(*hiddenBlitRowRight.scrollUpTile, hiddenBlitRowRight.dest);
+			else
+				blitTile(*hiddenBlitRowRight.scrollDownTile, hiddenBlitRowRight.dest);
+
+
+		}
 
 		scrollRightBlitFinished=0;
+		hiddenBlitColumnDirty=0;
+		leftScrollDir=0;
 	}
 
 	//uart_printf("scrollXDelay %d\n",scrollXDelay);
@@ -763,7 +936,12 @@ void scrollRight()
 #ifdef DEBUG_PRINT
 				uart_printf("Blit tile : %d %d\n",(hiddenBlitColumnCurrent.scrollRightTile-mapData)/LEVELMAP_WIDTH,(hiddenBlitColumnCurrent.scrollRightTile-mapData)%LEVELMAP_WIDTH);
 #endif
+
+				savedWordPtr = hiddenBlitColumnCurrent.dest + 16*FRAMEBUFFER_LINE_PITCH/2 - FRAMEBUFFER_PLANE_PITCH/2;
+				savedWord = *savedWordPtr;
+
 				blitTile(*hiddenBlitColumnCurrent.scrollRightTile, hiddenBlitColumnCurrent.dest);
+				hiddenBlitColumnDirty=1;
 
 				WRAPPED_TILE_MOVEPTR_DOWN(hiddenBlitColumnCurrent);
 
@@ -788,6 +966,105 @@ if ()
 
 //uart_printf("tileIdPtr %p %d %d %d\n",tileIdPtr, blitTileX, tileIdPtr[0] , tileIdPtr[1]);
 
+void alignOnTileBoundary()
+{
+	if ((scrollX&0xf)>=8)
+	{
+		while ((scrollX&0xf)!=0)
+			scrollRight();
+	}
+	else
+	{
+		while ((scrollX&0xf)!=0)
+			scrollLeft();
+	}
+
+	if ((scrollY&0xf)>=8)
+	{
+		while ((scrollY&0xf)!=0)
+			scrollDown();
+	}
+	else
+	{
+		while ((scrollY&0xf)!=0)
+			scrollUp();
+	}
+}
+
+
+int verifyVisibleWindow()
+{
+	int x,y;
+	/*
+
+	uint16_t *dest=firstFetchWord + scrollYLine * FRAMEBUFFER_LINE_PITCH/2 + 1;
+	uint8_t *src = topLeftMapTile;
+
+	for (y=0; y<SCREEN_HEIGHT/16 ; y++) //2 extra Tiles für oben und unten
+	//for (y=0; y<3;y++)
+	{
+		//src = &mapData[99];
+		for (x=0; x<SCREEN_WIDTH/16 ; x++) //2 extra Tiles für links und rechts
+		{
+			uint8_t tileId = *src;
+			//uint8_t tileId = 0;
+
+			if (verifyTile(tileId,dest))
+			{
+				uart_printf("Verify failed %d %d\n",x,y);
+				return 1;
+			}
+
+			dest++; //ein Wort weiter nach rechts
+			src++;
+		}
+
+		//Wir sind nun am Rand angelangt. Das Wort nun per LINE Modulo auf den Anfang der nächsten Zeile und dann mit TODO
+
+		dest += 3 + 4 * FRAMEBUFFER_PLANE_PITCH/2 + 15 * FRAMEBUFFER_LINE_PITCH/2;
+		src += 100 - (SCREEN_WIDTH/16);
+
+		if (dest >= lastFetchWord) \
+			dest -= FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT; \
+
+	}
+	*/
+	//uart_printf("verifyVisibleWindow %d\n", scrollYLine);
+	uint16_t *dest=firstFetchWord + ((scrollYLine&~0xf)-16) * FRAMEBUFFER_LINE_PITCH/2;
+	uint8_t *src = topLeftMapTile-LEVELMAP_WIDTH-1;
+
+	if (dest < firstFetchWord)
+		dest += FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
+
+	for (y=0; y<SCREEN_HEIGHT/16 + 2; y++) //2 extra Tiles für oben und unten
+	{
+		for (x=0; x<SCREEN_WIDTH/16 + 2; x++) //2 extra Tiles für links und rechts
+		{
+			uint8_t tileId = *src;
+			//uint8_t tileId = 0;
+
+			if (verifyTile(tileId,dest))
+			{
+				uart_printf("Verify failed %d %d\n",x,y);
+				return 1;
+			}
+
+
+			dest++; //ein Wort weiter nach rechts
+			src++;
+		}
+
+		//Wir sind nun am Rand angelangt. Das Wort nun per LINE Modulo auf den Anfang der nächsten Zeile und dann mit TODO
+
+		dest += 1 + 4 * FRAMEBUFFER_PLANE_PITCH/2 + 15 * FRAMEBUFFER_LINE_PITCH/2;
+		src += 100 - (SCREEN_WIDTH/16 + 2);
+		if (dest >= lastFetchWord)
+			dest -= FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
+	}
+
+
+	return 0;
+}
 
 void renderFullScreen()
 {
@@ -799,61 +1076,90 @@ void renderFullScreen()
 	 * Die oberste Tile-Zeile ist nicht zu sehen. Ebenso die linkeste Spalte.
 	 * Das Display-Window beginnt oben links mit dem 2. Tile von links und dem 2. Tile von oben. Das erscheint irgendwie sinnvoll als Anfangszustand.
 	 */
-	scrollX&=~15;
-	scrollY&=~15;
+	scrollX&=~0xf;
+	scrollY&=~0xf;
 
-	topLeftMapTile = mapData;
+	scrollRightBlitFinished=0;
+	scrollLeftBlitFinished=0;
+	hiddenBlitColumnDirty=0;
+	upScrollDir=1;
+	leftScrollDir=0;
+	lastScrollStepLeft=0;
+	savedWord=0;
+	savedWordPtr=0;
+
+	topLeftMapTile = mapData + scrollX/16 + (scrollY/16)*LEVELMAP_WIDTH;
+
+	scrollXWord = (scrollX/16);
+
+	firstFetchWord = bitmap + scrollXWord;
+	lastFetchWord = firstFetchWord + FRAMEBUFFER_WIDTH/16*FRAMEBUFFER_HEIGHT*SCREEN_DEPTH;
+
 
 	//topLeftWord = bitmap + scrollX/16 + FRAMEBUFFER_LINE_PITCH/2*16;
 	//topTileWord = bitmap + scrollX/16 + FRAMEBUFFER_LINE_PITCH/2*16;
 
-	hiddenBlitRowLeft.dest = bitmap + (FRAMEBUFFER_LINE_PITCH/2)*16*18;
+#if 0
+	//HiddenBlitRow erstreckt sich über die ganze Zeile.
+	hiddenBlitRowLeft.dest = firstFetchWord + (FRAMEBUFFER_LINE_PITCH/2)*16*18;
 	hiddenBlitRowLeft.scrollDownTile = topLeftMapTile + LEVELMAP_WIDTH*17 - 1;
 	hiddenBlitRowLeft.scrollUpTile = topLeftMapTile - LEVELMAP_WIDTH*2 - 1;
 
-	hiddenBlitRowRight.dest = hiddenBlitRowLeft.dest + 21;
-	hiddenBlitRowRight.scrollDownTile = topLeftMapTile + LEVELMAP_WIDTH*17 + 20;
-	hiddenBlitRowRight.scrollUpTile = topLeftMapTile - LEVELMAP_WIDTH*2 + 20;
+	hiddenBlitRowRight.dest = hiddenBlitRowLeft.dest + 22;
+	hiddenBlitRowRight.scrollDownTile = topLeftMapTile + LEVELMAP_WIDTH*17 + 21;
+	hiddenBlitRowRight.scrollUpTile = topLeftMapTile - LEVELMAP_WIDTH*2 + 21;
 	uart_printf("%p %p\n",topLeftMapTile + LEVELMAP_WIDTH*17 + 20, hiddenBlitRowLeft.scrollDownTile + 21);
 	uart_printf("%p %p\n",topLeftMapTile - LEVELMAP_WIDTH*2 + 20, hiddenBlitRowLeft.scrollUpTile + 21);
 
-	hiddenBlitRowCurrent = hiddenBlitRowLeft;
-
-
-
-	hiddenBlitColumnTop.dest = bitmap + 22;
+	//Die Spalte mischt sich nicht in die Tiles der Zeile ein.
+	hiddenBlitColumnTop.dest = firstFetchWord + 22;
 	hiddenBlitColumnTop.scrollRightTile = topLeftMapTile -LEVELMAP_WIDTH + 21;
 	hiddenBlitColumnTop.scrollLeftTile = topLeftMapTile -LEVELMAP_WIDTH - 2;
 
 	hiddenBlitColumnBottom.dest = hiddenBlitColumnTop.dest + (FRAMEBUFFER_LINE_PITCH/2)*16 *17;
 	hiddenBlitColumnBottom.scrollRightTile = topLeftMapTile + 16*LEVELMAP_WIDTH + 21;
 	hiddenBlitColumnBottom.scrollLeftTile = topLeftMapTile + 16*LEVELMAP_WIDTH - 2;
+#else
+	//HiddenBlitRow erstreckt sich NICHT über die ganze Zeile.
+	hiddenBlitRowLeft.dest = firstFetchWord + (FRAMEBUFFER_LINE_PITCH/2)*16*18;
+	hiddenBlitRowLeft.scrollDownTile = topLeftMapTile + LEVELMAP_WIDTH*17 - 1;
+	hiddenBlitRowLeft.scrollUpTile = topLeftMapTile - LEVELMAP_WIDTH*2 - 1;
 
+	hiddenBlitRowRight.dest = hiddenBlitRowLeft.dest + 21;
+	hiddenBlitRowRight.scrollDownTile = topLeftMapTile + LEVELMAP_WIDTH*17 + 20;
+	hiddenBlitRowRight.scrollUpTile = topLeftMapTile - LEVELMAP_WIDTH*2 + 20;
+	//uart_printf("%p %p\n",topLeftMapTile + LEVELMAP_WIDTH*17 + 20, hiddenBlitRowLeft.scrollDownTile + 21);
+	//uart_printf("%p %p\n",topLeftMapTile - LEVELMAP_WIDTH*2 + 20, hiddenBlitRowLeft.scrollUpTile + 21);
+
+	//Die Spalte erstreckt sich über die ganze Höhe des Framebuffers
+	hiddenBlitColumnTop.dest = firstFetchWord + 22;
+	hiddenBlitColumnTop.scrollRightTile = topLeftMapTile -LEVELMAP_WIDTH + 21;
+	hiddenBlitColumnTop.scrollLeftTile = topLeftMapTile -LEVELMAP_WIDTH - 2;
+
+	hiddenBlitColumnBottom.dest = hiddenBlitColumnTop.dest + (FRAMEBUFFER_LINE_PITCH/2)*16 *18;
+	hiddenBlitColumnBottom.scrollRightTile = topLeftMapTile + 17*LEVELMAP_WIDTH + 21;
+	hiddenBlitColumnBottom.scrollLeftTile = topLeftMapTile + 17*LEVELMAP_WIDTH - 2;
+
+#endif
+
+	hiddenBlitRowCurrent = hiddenBlitRowLeft;
 	hiddenBlitColumnCurrent = hiddenBlitColumnTop;
 
-
-	firstFetchWord = bitmap + scrollX/16;
-	lastFetchWord = firstFetchWord + FRAMEBUFFER_WIDTH/16*FRAMEBUFFER_HEIGHT*SCREEN_DEPTH;
-
-	uart_printf("lastFetchWord %x\n",lastFetchWord);
-	uart_printf("hiddenBlitColumnBottom %x\n",hiddenBlitColumnBottom);
+	//uart_printf("lastFetchWord %x\n",lastFetchWord);
+	//uart_printf("hiddenBlitColumnBottom %x\n",hiddenBlitColumnBottom);
 	//hiddenBlitColumn = bitmap + 18; //for testing, weil man es sieht
 
 	//firstFetchWord = topLeftWord - EXTRA_FETCH_WORDS;
 
-
-
 	//Da wir ein Word früher anfangen zu fetchen...
-
-
 
 	scrollXDelay=0;
 	scrollYLine=16;
-	scrollXWord=0;
+
 
 	custom.bplcon1=0;
 
-	uint8_t *dest=(uint8_t*)bitmap;
+	uint16_t *dest=firstFetchWord;
 	uint8_t *src = topLeftMapTile-LEVELMAP_WIDTH-1;
 
 	//src = mapData-1;
@@ -868,30 +1174,51 @@ void renderFullScreen()
 			uint8_t tileId = *src;
 			//uint8_t tileId = 0;
 
-			uint16_t *tilePtr = tilemapChip + SCREEN_DEPTH * 16 * tileId;
+			blitTile(tileId,dest);
 
-			//vom tile ins bild
-			custom.bltcon0 = BC0F_SRCA | A_TO_D | BC0F_DEST;
-			custom.bltapt = (void*)tilePtr;
-			custom.bltdpt = (void*)dest;
-			custom.bltamod = 0;
-			custom.bltdmod = (FRAMEBUFFER_WIDTH - 16)/8;
-			custom.bltafwm = 0xffff;
-			custom.bltalwm = 0xffff;
-			custom.bltsize = ((5*16) << HSIZEBITS) | 1; //starts blitter. 16 x 16 Pixel
 
-			while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter
-			while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter. am besten 2 mal?
-
-			dest+=2; //ein Wort weiter nach rechts
+			dest++; //ein Wort weiter nach rechts
 			src++;
 		}
 
 		//Wir sind nun am Rand angelangt. Das Wort nun per LINE Modulo auf den Anfang der nächsten Zeile und dann mit TODO
 
-		dest+=2 + 4 * FRAMEBUFFER_PLANE_PITCH + 15 * FRAMEBUFFER_LINE_PITCH;
+		dest += 1 + 4 * FRAMEBUFFER_PLANE_PITCH/2 + 15 * FRAMEBUFFER_LINE_PITCH/2;
 		src += 100 - (SCREEN_WIDTH/16 + 2);
 	}
+
+	//Es macht Sinn die HiddenBlitRow und die HiddenBlitColumn auf ein links oder oben scrollen vorzubereiten
+	if (scrollX!=0)
+	{
+		dest = hiddenBlitColumnTop.dest;
+		src = hiddenBlitColumnTop.scrollLeftTile;
+
+		while (dest <= hiddenBlitColumnBottom.dest)
+		{
+			blitTile(*src, dest - FRAMEBUFFER_PLANE_PITCH/2);
+
+			dest += 16 * FRAMEBUFFER_LINE_PITCH/2;
+			src += LEVELMAP_WIDTH;
+		}
+
+	}
+
+	if (scrollY!=0)
+	{
+		dest = hiddenBlitRowLeft.dest;
+		src = hiddenBlitRowLeft.scrollUpTile;
+
+		while (dest <= hiddenBlitRowRight.dest)
+		{
+			blitTile(*src, dest);
+
+			dest++;
+			src++;
+		}
+	}
+
+	blitTile(*(topLeftMapTile - LEVELMAP_WIDTH*2 - 2), hiddenBlitRowRight.dest + 1 - FRAMEBUFFER_PLANE_PITCH/2);
+
 #endif
 }
 

@@ -9,6 +9,7 @@
 	XDEF	_getSR
 	XDEF	_tilemap
 	XDEF	_protrackerModule_alien
+	XDEF 	_testSoundEffect
 	XREF	_custom
 	XREF	_vBlankCounter
 
@@ -45,6 +46,9 @@ _tilemap:
 
 _protrackerModule_alien:
 	incbin "alien.mod"
+
+_testSoundEffect:
+	incbin "ironchg1.raw"
 
     END
 

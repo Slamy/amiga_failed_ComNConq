@@ -48,6 +48,8 @@ void scrollLeft();
 void initVideo();
 void renderFullScreen();
 void constructCopperList();
+void alignOnTileBoundary();
+int verifyVisibleWindow();
 
 
 #endif /* SRC_SCROLLENGINE_H_ */
