@@ -25,6 +25,8 @@
 #define SPR6PTH 0x138
 #define SPR7PTH 0x13C
 
+#define COLOR00 0x180
+
 
 #define COPPER_WRITE_32(ADR,VAL) \
 	copperlist[i++]=ADR; \

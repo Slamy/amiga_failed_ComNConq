@@ -25,6 +25,8 @@ add_executable (tilescroll
 	../assets/leveldata.c
 	)
 	
+set_source_files_properties (../assets/leveldata.c PROPERTY GENERATED)
+	
 target_include_directories (tilescroll PUBLIC
 	../ptplayer
 	../assets
@@ -32,6 +34,8 @@ target_include_directories (tilescroll PUBLIC
 
 add_dependencies (tilescroll tilemap)
 add_dependencies (tilescroll leveldata)
+add_dependencies (tilescroll testbob)
+add_dependencies (tilescroll mousecursor)
 
 add_custom_target(copyToEmulator
 	COMMAND cp tilescroll ~/Amiga/Festplatte/m

@@ -12,9 +12,12 @@
 	XDEF 	_testSoundEffect
 	XREF	_custom
 	XREF	_vBlankCounter
+	XREF	_mouseCursor
+	XREF	_supervisor_disableDataCache
+	XREF	_supervisor_getCACR
+	XREF	_testbob
 
-    section code
-
+    section code_c
 
 _supervisor_enableInterrupts:
 	ANDI.W   #$F0FF,SR  ;Mask off old IPL bits
@@ -29,6 +32,18 @@ _getSR:
 	move.w SR,d0
 	rte
 
+_supervisor_getCACR:
+	movec cacr,d0
+	rte
+
+_supervisor_disableDataCache:
+	movec cacr,d0
+	bset #0,d0 ; i cache on
+	bset #4,d0 ; i burst on
+	bclr #8,d0 ; d cache off
+	bclr #12,d0 ; d burst off
+	movec d0,cacr
+	rte
 
 _isr_verticalBlank:
 	move.l	a6,-(sp)
@@ -44,11 +59,18 @@ _isr_verticalBlank:
 _tilemap:
 	incbin "../assets/tilemap.bin"
 
+_mouseCursor:
+	incbin "../assets/mousecursor.bin"
+
 _protrackerModule_alien:
 	incbin "alien.mod"
 
 _testSoundEffect:
+	ds.w 0
 	incbin "ironchg1.raw"
+
+_testbob:
+	incbin "../assets/testbob.bin"
 
     END
 

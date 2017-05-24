@@ -8,14 +8,15 @@
 #ifndef SRC_SCROLLENGINE_H_
 #define SRC_SCROLLENGINE_H_
 
+#include <stdint.h>
 
 //tatsächlich sichtbares Window
 #define SCREEN_WIDTH	320
 #define SCREEN_HEIGHT	256
 #define SCREEN_DEPTH	5
 
-#define EXTRA_TILES_HORIZONTAL		3
-#define EXTRA_TILES_VERTICAL		3
+#define EXTRA_TILES_HORIZONTAL		4
+#define EXTRA_TILES_VERTICAL		4
 #define EXTRA_PIXELS_HORIZONTAL		(EXTRA_TILES_HORIZONTAL*16)
 #define EXTRA_PIXELS_VERTICAL		(EXTRA_TILES_VERTICAL*16)
 
@@ -50,6 +51,8 @@ void renderFullScreen();
 void constructCopperList();
 void alignOnTileBoundary();
 int verifyVisibleWindow();
-
+void setSpriteStruct(int x, int y, int h);
+void blitTestBlob_mapCoordinate(uint16_t* src, int x, int y, int width, int height);
+void blitMaskedBob(uint16_t *dest, int shift, uint16_t* src, int width, int height );
 
 #endif /* SRC_SCROLLENGINE_H_ */

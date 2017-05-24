@@ -32,6 +32,10 @@
 #define KEYCODE_Q 0x10
 #define KEYCODE_W 0x11
 #define KEYCODE_E 0x12
+#define KEYCODE_R 0x13
+#define KEYCODE_T 0x14
+//#define KEYCODE_Z 0x15
+
 #define KEYCODE_I 0x17
 
 #define KEYCODE_A 0x20
@@ -50,13 +54,14 @@
 #define KEYCODE_NUM6	0x2F
 #define KEYCODE_NUM8	0x3E
 
-
+#define POTINP_DATLY_MASK (1<<10)
 
 
 
 extern uint16_t *tilemapChip;
 uint8_t *chipMemMod=NULL;
 uint8_t *chipTestSoundEffect=NULL;
+uint16_t *testBobChip=NULL;
 extern uint16_t *bitmap;
 
 extern struct Custom custom;
@@ -215,27 +220,47 @@ void mouseCheck()
 #define SC_RIGHT	2
 #define SC_DOWN		3
 #define SC_LEFT		4
+#define SC_UP16		5
+#define SC_RIGHT16	6
+#define SC_DOWN16	7
+#define SC_LEFT16	8
 
+unsigned char camMoveScript[9000];
 
-unsigned char camMoveScript[100];
-
+//DOWN16 DOWN16 DOWN16 DOWN16 LEFT16 UP   1
+//777781 fail on run 69631
 
 unsigned char *camMoveScriptPtr = camMoveScript;
 unsigned char camMoveScriptStepsTaken=0;
 
+void executeCamMoveScriptPtr()
+{
+	int i;
+	switch (*camMoveScriptPtr)
+	{
+	case SC_LEFT:		scrollLeft(); break;
+	case SC_RIGHT:		scrollRight(); break;
+	case SC_UP:			scrollUp(); break;
+	case SC_DOWN:		scrollDown(); break;
+
+	case SC_LEFT16:		for (i=0; i< 16;i++) scrollLeft(); break;
+	case SC_RIGHT16:	for (i=0; i< 16;i++) scrollRight(); break;
+	case SC_UP16:		for (i=0; i< 16;i++) scrollUp(); break;
+	case SC_DOWN16:		for (i=0; i< 16;i++) scrollDown(); break;
+
+	}
+
+	if (*camMoveScriptPtr != SC_END)
+		camMoveScriptPtr++;
+}
+
 void executeCamMoveScript()
 {
+
 	camMoveScriptPtr = camMoveScript;
 	while (*camMoveScriptPtr != SC_END)
 	{
-		switch (*camMoveScriptPtr)
-		{
-		case SC_LEFT:	scrollLeft(); break;
-		case SC_RIGHT:	scrollRight(); break;
-		case SC_UP:		scrollUp(); break;
-		case SC_DOWN:	scrollDown(); break;
-		}
-		camMoveScriptPtr++;
+		executeCamMoveScriptPtr();
 	}
 }
 
@@ -256,7 +281,7 @@ void incrementCamMoveScript()
 	for(;;)
 	{
 		(*camMoveScriptPtr)++;
-		if (*camMoveScriptPtr > SC_LEFT)
+		if (*camMoveScriptPtr > SC_LEFT16)
 		{
 			*camMoveScriptPtr=1;
 			camMoveScriptPtr++;
@@ -273,10 +298,14 @@ void printCamMoveScriptWord()
 	{
 		switch (*camMoveScriptPtr)
 		{
-		case SC_LEFT:	uart_printf("LEFT "); break;
-		case SC_RIGHT:	uart_printf("RIGHT "); break;
-		case SC_UP:		uart_printf("UP "); break;
-		case SC_DOWN:	uart_printf("DOWN "); break;
+		case SC_LEFT:		uart_printf("LEFT "); break;
+		case SC_RIGHT:		uart_printf("RIGHT "); break;
+		case SC_UP:			uart_printf("UP "); break;
+		case SC_DOWN:		uart_printf("DOWN "); break;
+		case SC_LEFT16:		uart_printf("LEFT16 "); break;
+		case SC_RIGHT16:	uart_printf("RIGHT16 "); break;
+		case SC_UP16:		uart_printf("UP16 "); break;
+		case SC_DOWN16:		uart_printf("DOWN16 "); break;
 		}
 		camMoveScriptPtr++;
 	}
@@ -297,6 +326,7 @@ void printCamMoveScriptNumber()
 
 void ScrollUnitTest()
 {
+	uart_printf("ScrollUnitTest!\n");
 	uint32_t i;
 
 	initCamMoveScript();
@@ -304,7 +334,7 @@ void ScrollUnitTest()
 	{
 		//printCamMoveScript();
 		scrollX=128*2;
-		scrollY=128*2;
+		scrollY=128;
 
 		renderFullScreen();
 
@@ -322,22 +352,40 @@ void ScrollUnitTest()
 			break;
 		incrementCamMoveScript();
 
+
+		if ((i&0x3ff)==0)
+		{
+			printCamMoveScriptNumber();
+			uart_printf(" at %d\n",i);
+		}
 	}
 	printCamMoveScriptNumber();
-	uart_printf(" on run %d\n",i);
+	uart_printf(" fail on run %d\n",i);
 }
+
+//Notizen
+
+//LEFT DOWN RIGHT UP LEFT UP   1
+//432141 fail on run 2160
+
+//UP UP LEFT DOWN DOWN   1
+//11433 fail on run 1029
+
+//LEFT DOWN LEFT DOWN LEFT DOWN LEFT DOWN LEFT LEFT LEFT DOWN LEFT LEFT
+//DOWN LEFT LEFT LEFT DOWN LEFT DOWN LEFT DOWN LEFT DOWN LEFT DOWN LEFT DOWN LEFT DOWN LEFT DOWN DOWN DOWN verifyTile failed 1
 
 void overtake()
 {
 	int i,x,y;
 	
-	tilemapChip=AllocMem(1000, MEMF_CHIP);
+	tilemapChip=AllocMem(sizeof(tilemap), MEMF_CHIP);
 	assert(tilemapChip);
 	chipMemMod = AllocMem(94848, MEMF_CHIP);
 	assert(chipMemMod);
-	chipTestSoundEffect = AllocMem(26262, MEMF_CHIP);
+	chipTestSoundEffect = AllocMem(26262+2, MEMF_CHIP);
 	assert(testSoundEffect);
-
+	testBobChip=AllocMem(12288, MEMF_CHIP);
+	assert(testBobChip);
 
 	initVideo();
 	
@@ -347,12 +395,14 @@ void overtake()
 		bitmap[i]=0x5555;
 	}
 
+#if 1
 	for (i=0;i<sizeof(mapData);i++)
 	{
 		mapData[i]=2;
 	}
+#endif
 
-
+#if 0
 	for (y=0;y<LEVELMAP_HEIGHT;y++)
 	{
 		for (x=0;x<LEVELMAP_WIDTH;x++)
@@ -383,11 +433,13 @@ void overtake()
 		mapData[i*LEVELMAP_WIDTH + 6]=(i & 64) ? 0 : 2;
 	}
 
+#endif
+#if 1
 	for (i=0;i<sizeof(mapData);i++)
 	{
 		mapData[i]=leveldata[i]-1;
 	}
-
+#endif
 
 	/*
 	for (i=0;i<30;i++)
@@ -469,11 +521,15 @@ void overtake()
 	{
 		tilemapChip[i] = tilemap[i];
 	}
+
+	for (i=0;i<sizeof(testbob)/2;i++)
+		testBobChip[i] = testbob[i];
+
 	
 #if 0
 	mt_install_cia();
 	mt_init(chipMemMod);
-	mt_mastervol(5);
+	mt_mastervol(40);
 	
 	mt_Enable=1; //PTreplay darf abspielen
 #endif
@@ -482,10 +538,15 @@ void overtake()
 
 	//Startposition
 	scrollX=128*2;
-	scrollY=128*2;
+	scrollY=128;
+	//scrollX=0;
+	//scrollY=0;
 
 	renderFullScreen();
+	camMoveScriptPtr=camMoveScript;
 	constructCopperList();
+
+	//blitTestBlob();
 
 	mouseDataLast = custom.joy0dat;
 
@@ -515,6 +576,48 @@ void overtake()
 
 	//ScrollUnitTest();
 
+	i=0;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_LEFT;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_DOWN;
+	camMoveScript[i++]=SC_END;
+
+
+	int mouseCursorX=0;
+	int mouseCursorY=0;
+
 	while(1)
 	{
 		//bitmap[vBlankCounter>>3]=0xFFFF;
@@ -524,6 +627,18 @@ void overtake()
 #if 0
 		toScrollX+= mouseXDiff;
 		toScrollY+= mouseYDiff;
+#else
+		mouseCursorX+=mouseXDiff;
+		mouseCursorY+=mouseYDiff;
+		if (mouseCursorX > (SCREEN_WIDTH-1))
+			mouseCursorX = SCREEN_WIDTH-1;
+		if (mouseCursorY > (SCREEN_HEIGHT-1))
+			mouseCursorY = SCREEN_HEIGHT-1;
+		if (mouseCursorX < 0)
+			mouseCursorX = 0;
+		if (mouseCursorY < 0)
+			mouseCursorY = 0;
+
 #endif
 
 		/*
@@ -535,6 +650,20 @@ void overtake()
 			uart_printf("Key:%x %p %x\n",cia_interrupt,&ciaa.ciaicr,ciaa.ciasdr);
 		}
 		*/
+		//uart_printf("ciapra %x %x\n",ciaa.ciapra, custom.potinp);
+
+		if (!(ciaa.ciapra & CIAF_GAMEPORT0))
+		{
+			//renderFullScreen();
+			blitTestBlob_mapCoordinate(testBobChip, mouseCursorX, mouseCursorY, 128, 128);
+		}
+
+		if (!(custom.potinp & POTINP_DATLY_MASK))
+		{
+			toScrollY = -((SCREEN_HEIGHT/2) - mouseCursorY) / 10;
+			toScrollX = -((SCREEN_WIDTH/2) - mouseCursorX) / 10;
+		}
+
 		keyboardCheck();
 
 		if (keyPress != -1)
@@ -542,7 +671,7 @@ void overtake()
 			switch (keyPress)
 			{
 			case KEYCODE_NUM8:
-				debugVerticalScrollAmount=-1;
+				debugVerticalScrollAmount=-2;
 				uart_printf("debugVerticalScrollAmount=-1;\n");
 				keyPress=-1;
 				break;
@@ -552,7 +681,7 @@ void overtake()
 				keyPress=-1;
 				break;
 			case KEYCODE_NUM4:
-				debugHorizontalScrollAmount=-1;
+				debugHorizontalScrollAmount=-2;
 				uart_printf("debugHorizontalScrollAmount=-1;\n");
 				keyPress=-1;
 				break;
@@ -564,7 +693,7 @@ void overtake()
 			case KEYCODE_NUM5:
 				debugHorizontalScrollAmount=0;
 				debugVerticalScrollAmount=0;
-				uart_printf("debugScrollAmount disavled\n");
+				uart_printf("debugScrollAmount disabled\n");
 
 				mt_soundfx(chipTestSoundEffect, sizeof(testSoundEffect)/2, 230, 64);
 				keyPress=-1;
@@ -587,9 +716,16 @@ void overtake()
 				keyPress=-1;
 				break;
 			case KEYCODE_G:
-				uart_printf("ScrollUnitTest!\n");
-				ScrollUnitTest();
+				//ScrollUnitTest();
+				executeCamMoveScriptPtr();
 				keyPress=-1;
+				break;
+			case KEYCODE_T:
+				scrollX=128*2;
+				scrollY=128*2;
+
+				renderFullScreen();
+				camMoveScriptPtr=camMoveScript;
 				break;
 			case KEYCODE_H:
 				//renderFullScreen();
@@ -598,7 +734,7 @@ void overtake()
 					uart_printf("Verify failed!\n");
 				else
 					uart_printf("Verify success!\n");
-				camMoveScriptPtr=camMoveScript;
+				//camMoveScriptPtr=camMoveScript;
 				keyPress=-1;
 				break;
 
@@ -651,30 +787,59 @@ void overtake()
 
 #if 1
 
-		for (i=0; i < 20;i++)
+		for (i=0; i < 40;i++)
 		{
-			if (toScrollY > 0)
+#if 0
+			if (verifyVisibleWindow())
 			{
-				scrollDown();
-				toScrollY--;
+				printCamMoveScriptWord();
 			}
-
-			if (toScrollY < 0)
+			else
+#endif
 			{
-				scrollUp();
-				toScrollY++;
-			}
+				if (toScrollY > 0)
+				{
+#if 0
+					camMoveScriptPtr[0]=SC_DOWN;
+					camMoveScriptPtr[1]=SC_END;
+					camMoveScriptPtr++;
+#endif
+					scrollDown();
+					toScrollY--;
+				}
 
-			if (toScrollX > 0)
-			{
-				scrollRight();
-				toScrollX--;
-			}
+				if (toScrollY < 0)
+				{
+#if 0
+					camMoveScriptPtr[0]=SC_UP;
+					camMoveScriptPtr[1]=SC_END;
+					camMoveScriptPtr++;
+#endif
+					scrollUp();
+					toScrollY++;
+				}
 
-			if (toScrollX < 0)
-			{
-				scrollLeft();
-				toScrollX++;
+				if (toScrollX > 0)
+				{
+#if 0
+					camMoveScriptPtr[0]=SC_RIGHT;
+					camMoveScriptPtr[1]=SC_END;
+					camMoveScriptPtr++;
+#endif
+					scrollRight();
+					toScrollX--;
+				}
+
+				if (toScrollX < 0)
+				{
+#if 0
+					camMoveScriptPtr[0]=SC_LEFT;
+					camMoveScriptPtr[1]=SC_END;
+					camMoveScriptPtr++;
+#endif
+					scrollLeft();
+					toScrollX++;
+				}
 			}
 
 		}
@@ -694,6 +859,7 @@ void overtake()
 #endif
 		waitVBlank();
 
+		setSpriteStruct(mouseCursorX, mouseCursorY, 16);
 		constructCopperList();
 
 	}
@@ -740,9 +906,13 @@ void maustest()
 int main()
 {
 	//maustest();
-	uart_printf("Howdy %d!\n", 2);
+	uart_printf("Howdy %d!\n", 42);
+
+	printf("Testbob: %p\n",testbob);
+	//printf("CACR = 0x%x\n",Supervisor(supervisor_getCACR));
 
 	overtake();
+
 	return 0;
 	
 }
