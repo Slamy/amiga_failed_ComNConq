@@ -45,13 +45,14 @@ void scrollDown();
 void scrollRight();
 void scrollLeft();
 void initVideo();
+void waitVBlank();
 void renderFullScreen();
 void constructCopperList();
 void alignOnTileBoundary();
 int verifyVisibleWindow();
 void setSpriteStruct(uint16_t *spriteStruct, int x, int y, int h);
 void blitMaskedBob_mapCoordinate(uint16_t* src, int x, int y, int width, int height);
-void blitMaskedBob(uint16_t *dest, int shift, uint16_t* src, int width, int height );
+void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int height );
 void blitMaskedBob_screenCoordinate(uint16_t* src, int x, int y, int width, int height);
 void restoreBackground();
 

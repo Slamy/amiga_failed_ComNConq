@@ -34,6 +34,10 @@
 extern volatile struct Custom custom;
 
 
+volatile uint16_t vBlankCounter=0;
+uint16_t vBlankCounterLast;
+
+
 int scrollXDelay=0;
 int scrollXWord=0;
 
@@ -127,9 +131,9 @@ uint8_t *topLeftMapTile;
 //#define DEBUG_VERTICAL_SCROLL	0
 //#define DEBUG_HORIZONTAL_SCROLL	0
 //#define DEBUG_PRINT
-#define DEBUG_SCROLL_RUNTIME
+//#define DEBUG_SCROLL_RUNTIME
 #define DEBUG_BOB_RUNTIME
-#define DEBUG_COPPER_WRAP
+//#define DEBUG_COPPER_WRAP
 
 #ifdef DEBUG_VERTICAL_SCROLL
 int debugVerticalScrollAmount	= DEBUG_VERTICAL_SCROLL;
@@ -192,7 +196,6 @@ void constructCopperList()
 
 
 	if (scrollYLine > FRAMEBUFFER_HEIGHT-SCREEN_HEIGHT)
-	//if (0)
 	{
 		//Bei der Scroll-Position....
 
@@ -368,8 +371,11 @@ void initVideo()
 	custom.dmacon = DMAF_SETCLR | DMAF_COPPER | DMAF_RASTER | DMAF_MASTER | DMAF_BLITTER | DMAF_SPRITE;
 
 
-	return;
+	custom.intena = 0x3fff; //disable all interrupts
+	*(volatile uint32_t*)0x6c = (uint32_t)isr_verticalBlank; //set level 3 interrupt handler
+	custom.intena = INTF_SETCLR | INTF_INTEN | INTF_COPER ; //set INTB_VERTB
 
+	vBlankCounterLast=vBlankCounter;
 
 }
 
@@ -409,7 +415,7 @@ void blitMaskedBob_mapCoordinate(uint16_t* src, int x, int y, int width, int hei
 				1 + 16*FRAMEBUFFER_LINE_PITCH/2;
 	int shift = x & 0xf;
 
-	blitMaskedBob(dest, shift, src, width, height);
+	blitMaskedACBMBob(dest, shift, src, width, height);
 }
 
 void blitMaskedBob_screenCoordinate(uint16_t* src, int x, int y, int width, int height)
@@ -418,7 +424,7 @@ void blitMaskedBob_screenCoordinate(uint16_t* src, int x, int y, int width, int 
 	uint16_t *dest = topLeft.dest + x/16 + y*FRAMEBUFFER_LINE_PITCH/2 + 1 + 16*FRAMEBUFFER_LINE_PITCH/2;
 	int shift = x & 0xf;
 
-	blitMaskedBob(dest, shift, src, width, height);
+	blitMaskedACBMBob(dest, shift, src, width, height);
 }
 
 
@@ -473,7 +479,7 @@ void restoreBackground()
  * Der Copper-Wrap wird berücksichtigt.
  * Kein Clipping!
  */
-void blitMaskedBob(uint16_t *dest, int shift, uint16_t* src, int width, int height)
+void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int height)
 {
 	int i=0;
 
@@ -1357,5 +1363,11 @@ void setSpriteStruct(uint16_t *spriteStruct, int x, int y, int h)
 	((volatile uint16_t *)spriteStruct)[1] = (spriteYEnd<<8) | (((spriteYStart>>8)&1)<<2) | (((spriteYEnd>>8)&1)<<1) | (spriteX&1);
 }
 
+
+void waitVBlank()
+{
+	while (vBlankCounterLast == vBlankCounter);
+	vBlankCounterLast=vBlankCounter;
+}
 
 

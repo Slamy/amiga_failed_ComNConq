@@ -43,18 +43,7 @@ void startDebugger() //stub function
 
 }
 
-
-volatile uint16_t vBlankCounter=0;
-uint16_t vBlankCounterLast;
-
-void waitVBlank()
-{
-	while (vBlankCounterLast == vBlankCounter);
-	vBlankCounterLast=vBlankCounter;
-}
-
 //Based on https://github.com/keirf/Amiga-Stuff/blob/master/systest/keyboard.c
-
 
 #define SC_END		0
 #define SC_UP		1
@@ -333,11 +322,6 @@ void overtake()
 
 	i=0;
 
-
-	custom.intena = 0x3fff; //disable all interrupts
-	*(volatile uint32_t*)0x6c = (uint32_t)isr_verticalBlank; //set level 3 interrupt handler
-	custom.intena = INTF_SETCLR | INTF_INTEN | INTF_COPER ; //set INTB_VERTB
-
 #if 1
 	mt_install_cia();
 	mt_init(assets->protrackerModule_alien);
@@ -346,7 +330,7 @@ void overtake()
 	mt_Enable=1; //PTreplay darf abspielen
 #endif
 
-	vBlankCounterLast=vBlankCounter;
+
 
 	//Startposition
 	scrollX=128*2;
@@ -705,11 +689,28 @@ void overtake()
 			mouseSpritePtr = assets->sprite_mouseCursor1;
 
 		setSpriteStruct(mouseSpritePtr,mouseCursorX, mouseCursorY, 16);
+
 		constructCopperList();
 
+		restoreBackground();
+
+		static int animCnt=0;
+		uint16_t* bobPtr=NULL;
+
+		switch (animCnt/16)
+		{
+		case 0: bobPtr = &assets->bobunit0[0*288/2]; break;
+		case 1: bobPtr = &assets->bobunit0[1*288/2]; break;
+		case 2: bobPtr = &assets->bobunit0[2*288/2]; break;
+		}
+
+		animCnt++;
+		if (animCnt>=3*16)
+			animCnt=0;
+
+		if (bobPtr)
+			blitMaskedBob_mapCoordinate(bobPtr, 64, 64, 16, 24);
 	}
-
-
 }
 
 
