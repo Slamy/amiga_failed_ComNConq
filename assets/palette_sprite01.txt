@@ -1,0 +1,4 @@
+15 0 15		Pink als Tranzparenz
+0 10 0		Farbe 17, Sprite 0,1 Farbe 1
+0 14 0		Farbe 18, Sprite 0,2 Farbe 2
+15 15 15	Farbe 19, Sprite 0,2 Farbe 3

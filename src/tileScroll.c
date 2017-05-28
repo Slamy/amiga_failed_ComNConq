@@ -23,123 +23,24 @@
 #include "asmstuff.h"
 #include "copper.h"
 #include "uart.h"
+#include "assets.h"
 
-#define KEYCODE_1 0x01
-#define KEYCODE_2 0x02
-#define KEYCODE_3 0x03
-#define KEYCODE_4 0x04
-
-#define KEYCODE_Q 0x10
-#define KEYCODE_W 0x11
-#define KEYCODE_E 0x12
-#define KEYCODE_R 0x13
-#define KEYCODE_T 0x14
-//#define KEYCODE_Z 0x15
-
-#define KEYCODE_I 0x17
-
-#define KEYCODE_A 0x20
-#define KEYCODE_S 0x21
-#define KEYCODE_D 0x22
-#define KEYCODE_G 0x24
-#define KEYCODE_H 0x25
-#define KEYCODE_J 0x26
-#define KEYCODE_K 0x27
-#define KEYCODE_L 0x28
+#include "input.h"
+#include "ptplayerWrapper.h"
 
 
-#define KEYCODE_NUM2	0x1E
-#define KEYCODE_NUM4	0x2D
-#define KEYCODE_NUM5	0x2E
-#define KEYCODE_NUM6	0x2F
-#define KEYCODE_NUM8	0x3E
+//volatile struct Custom custom;
+//volatile struct CIA ciaa, ciab;
 
-#define POTINP_DATLY_MASK (1<<10)
-
-
-
-extern uint16_t *tilemapChip;
-uint8_t *chipMemMod=NULL;
-uint8_t *chipTestSoundEffect=NULL;
-uint16_t *testBobChip=NULL;
-extern uint16_t *bitmap;
-
-extern struct Custom custom;
+extern volatile struct Custom custom;
 extern volatile struct CIA ciaa, ciab;
 
-extern uint8_t mapData[LEVELMAP_HEIGHT*LEVELMAP_WIDTH];
 extern unsigned char leveldata[];
-
-extern int scrollY;
-extern int scrollX;
-
-extern int debugVerticalScrollAmount;
-extern int debugHorizontalScrollAmount;
 
 
 void startDebugger() //stub function
 {
 
-}
-
-
-extern volatile char mt_Enable asm ("mt_Enable");
-
-
-static inline void mt_install_cia(void)
-{
-	//PTreplay installiert Interrupt Vektor für CIA
-	asm (	"clr.b d0\n"
-				"suba.l a0,a0\n"
-				"lea %[custom],a6\n"
-				"jsr mt_install_cia\n"
-		     : //no outputs
-		     : [custom] "irm" (custom)
-		     : "a0","a6","d0");
-}
-
-static inline void mt_init(void *mod)
-{
-	//PTreplay initialisiert
-	asm (	"move.b #0,d0\n"
-			"move.l #0,a1\n"
-			"lea %[custom],a6\n"
-			"move.l %[module],a0\n"
-			"jsr mt_init"
-	     : //no outputs
-	     : [custom] "irm" (custom),
-		   [module] "irm" (mod)
-	     : "a0","a6","d0","a1","a2");
-}
-
-static inline void mt_mastervol(uint16_t masterVolume)
-{
-	//PTreplay Lautstärke auf 20 von 0 bis 64
-	asm (	"move.w %[masterVolume],d0\n"
-			"jsr mt_mastervol\n"
-		 : //no outputs
-		 : [masterVolume] "irm" (masterVolume)
-		 : "d0");
-}
-
-
-static inline void mt_soundfx(void *samplePtr, uint16_t sampleLen, uint16_t samplePeriod, uint16_t sampleVolume)
-{
-	//PTreplay initialisiert
-	asm (	"move.w %[sampleLen],d0\n"
-			"move.w %[samplePeriod],d1\n"
-			"move.w %[sampleVolume],d2\n"
-			"lea %[custom],a6\n"
-			"move.l %[samplePtr],a0\n"
-			"jsr mt_soundfx"
-	     : //no outputs
-	     : [custom] "irm" (custom),
-		   [samplePtr] "irm" (samplePtr),
-		   [samplePeriod] "irm" (samplePeriod),
-		   [sampleVolume] "irm" (sampleVolume),
-		   [sampleLen] "irm" (sampleLen)
-
-	     : "a0","a6","d0","d2","d1");
 }
 
 
@@ -154,66 +55,6 @@ void waitVBlank()
 
 //Based on https://github.com/keirf/Amiga-Stuff/blob/master/systest/keyboard.c
 
-int keyPress = -1;
-void keyboardCheck()
-{
-	//Check zuerst, ob ein Interrupt eingetragen wurde.
-	UBYTE cia_interrupt=ciaa.ciaicr;
-	if (cia_interrupt & CIAICRF_SP)
-	{
-		uint8_t keycode = ~ciaa.ciasdr;
-		uint8_t key = (keycode >> 1) | (keycode << 7); /* ROR 1 */
-
-		if (!(key & 0x80))
-			keyPress=key;
-		else
-			keyPress=-1;
-
-		ciaa.ciacra = CIACRAF_SPMODE | CIACRAF_START ; /* start the handshake */
-
-		uint8_t waitFor = ciaa.ciatalo + 70;
-		//uart_printf("Keycode: %x %x %x %x\n",key,keycode, cia_interrupt, keyPress);
-
-		while (waitFor != ciaa.ciatalo)
-		{
-			//uart_printf("Warte: %x %x\n",ciaa.ciatahi,ciaa.ciatalo);
-		}
-
-		//uart_printf("Warte: %x\n",keycode);
-		ciaa.ciacra = 0;
-	}
-}
-
-uint16_t mouseDataLast;
-int16_t mouseYDiff=0;
-int16_t mouseXDiff=0;
-void mouseCheck()
-{
-	uint16_t mouseData = custom.joy0dat;
-
-	/*
-	 * mouseY ist ein unsigned byte counter.
-	 * 0x10 zu 0x15 wären 5 Schritte, weil 0x15 - 0x10 = 5
-	 * 0xfe zu 0x03 sind aber auch 5 Schritte, weil es zum Overlap kommt.
-	 * 0x03 - 0xfe sind aber -0x251
-	 *
-	 */
-
-	mouseYDiff = ((mouseData>>8) - (mouseDataLast>>8));
-	mouseXDiff = ((mouseData & 0xff) - (mouseDataLast & 0xff));
-
-	if (mouseYDiff >= 128)
-		mouseYDiff -= 256;
-	else if (mouseYDiff <= -128)
-		mouseYDiff += 256;
-
-	if (mouseXDiff >= 128)
-		mouseXDiff -= 256;
-	else if (mouseXDiff <= -128)
-		mouseXDiff += 256;
-
-	mouseDataLast = mouseData;
-}
 
 #define SC_END		0
 #define SC_UP		1
@@ -376,23 +217,13 @@ void ScrollUnitTest()
 
 void overtake()
 {
-	int i,x,y;
-	
-	tilemapChip=AllocMem(sizeof(tilemap), MEMF_CHIP);
-	assert(tilemapChip);
-	chipMemMod = AllocMem(94848, MEMF_CHIP);
-	assert(chipMemMod);
-	chipTestSoundEffect = AllocMem(26262+2, MEMF_CHIP);
-	assert(testSoundEffect);
-	testBobChip=AllocMem(12288, MEMF_CHIP);
-	assert(testBobChip);
+	int i;
 
 	initVideo();
-	
 
 	for (i=0;i<FRAMEBUFFER_SIZE/2;i++)
 	{
-		bitmap[i]=0x5555;
+		bitmap[i]=0xFF00;
 	}
 
 #if 1
@@ -464,7 +295,8 @@ void overtake()
 	*/
 
 
-	volatile uint16_t *src=tilemap;
+	/*
+	volatile uint16_t *src=assets->tilemap;
 	volatile uint16_t *dest=bitmap;
 	for (y=0;y<SCREEN_HEIGHT * SCREEN_DEPTH;y++)
 	{
@@ -476,7 +308,7 @@ void overtake()
 		}
 		dest+=5;
 	}
-
+	*/
 
 
 	//einmal alle 8 Farben durch in der ersten Zeile. 4 Pixel pro Farbe
@@ -503,32 +335,12 @@ void overtake()
 
 
 	custom.intena = 0x3fff; //disable all interrupts
-	*(uint32_t*)0x6c = (uint32_t)isr_verticalBlank; //set level 3 interrupt handler
+	*(volatile uint32_t*)0x6c = (uint32_t)isr_verticalBlank; //set level 3 interrupt handler
 	custom.intena = INTF_SETCLR | INTF_INTEN | INTF_COPER ; //set INTB_VERTB
 
-	//Komplettes Protracker-Modul in Chip-Ram
-	for (i=0 ; i<sizeof(protrackerModule_alien); i++)
-	{
-		chipMemMod[i] = protrackerModule_alien[i];
-	}
-
-	for (i=0 ; i<sizeof(testSoundEffect); i++)
-	{
-		chipTestSoundEffect[i] = testSoundEffect[i];
-	}
-
-	for (i=0 ; i<sizeof(tilemap)/2; i++)
-	{
-		tilemapChip[i] = tilemap[i];
-	}
-
-	for (i=0;i<sizeof(testbob)/2;i++)
-		testBobChip[i] = testbob[i];
-
-	
-#if 0
+#if 1
 	mt_install_cia();
-	mt_init(chipMemMod);
+	mt_init(assets->protrackerModule_alien);
 	mt_mastervol(40);
 	
 	mt_Enable=1; //PTreplay darf abspielen
@@ -542,13 +354,18 @@ void overtake()
 	//scrollX=0;
 	//scrollY=0;
 
+	/*
+	for (i=0; i< 100; i++)
+		uart_printf("%d %d %s %p\n",42,50,"dsadasdsdd",1234);
+	*/
+
 	renderFullScreen();
 	camMoveScriptPtr=camMoveScript;
 	constructCopperList();
 
 	//blitTestBlob();
 
-	mouseDataLast = custom.joy0dat;
+	mouseInit();
 
 	int16_t toScrollY=0;
 	int16_t toScrollX=0;
@@ -614,9 +431,8 @@ void overtake()
 	camMoveScript[i++]=SC_DOWN;
 	camMoveScript[i++]=SC_END;
 
-
-	int mouseCursorX=0;
-	int mouseCursorY=0;
+	int16_t mouseCursorX=0;
+	int16_t mouseCursorY=0;
 
 	while(1)
 	{
@@ -628,17 +444,25 @@ void overtake()
 		toScrollX+= mouseXDiff;
 		toScrollY+= mouseYDiff;
 #else
-		mouseCursorX+=mouseXDiff;
-		mouseCursorY+=mouseYDiff;
+		mouseCursorX += mouseXDiff;
+		mouseCursorY += mouseYDiff;
+
 		if (mouseCursorX > (SCREEN_WIDTH-1))
 			mouseCursorX = SCREEN_WIDTH-1;
+
 		if (mouseCursorY > (SCREEN_HEIGHT-1))
 			mouseCursorY = SCREEN_HEIGHT-1;
+
 		if (mouseCursorX < 0)
 			mouseCursorX = 0;
+
 		if (mouseCursorY < 0)
 			mouseCursorY = 0;
 
+		//uart_printf("LINE %d %d %d %d %d\n",__LINE__,mouseXDiff,mouseYDiff, 0,0);
+		//uart_printf("LINE %d %d %d %d %d\n",__LINE__,0,0, mouseCursorX,mouseCursorY);
+
+		//volatile derp = mouseXDiff + mouseYDiff;
 #endif
 
 		/*
@@ -655,19 +479,17 @@ void overtake()
 		if (!(ciaa.ciapra & CIAF_GAMEPORT0))
 		{
 			//renderFullScreen();
-			blitTestBlob_mapCoordinate(testBobChip, mouseCursorX, mouseCursorY, 128, 128);
-		}
-
-		if (!(custom.potinp & POTINP_DATLY_MASK))
-		{
-			toScrollY = -((SCREEN_HEIGHT/2) - mouseCursorY) / 10;
-			toScrollX = -((SCREEN_WIDTH/2) - mouseCursorX) / 10;
+			restoreBackground();
+			//blitMaskedBob_mapCoordinate(assets->bobunit0, 64, 64, 16, 24);
+			blitMaskedBob_screenCoordinate(assets->testbob, mouseCursorX, mouseCursorY, 128, 128);
 		}
 
 		keyboardCheck();
 
 		if (keyPress != -1)
 		{
+			uart_printf("keyPress %x\n",keyPress);
+
 			switch (keyPress)
 			{
 			case KEYCODE_NUM8:
@@ -695,7 +517,7 @@ void overtake()
 				debugVerticalScrollAmount=0;
 				uart_printf("debugScrollAmount disabled\n");
 
-				mt_soundfx(chipTestSoundEffect, sizeof(testSoundEffect)/2, 230, 64);
+				mt_soundfx(assets->testSoundEffect, sizeof(assets->testSoundEffect)/2, 230, 64);
 				keyPress=-1;
 				break;
 
@@ -774,6 +596,7 @@ void overtake()
 				break;
 #endif
 
+#if 0
 			case KEYCODE_Q:
 				scrollDown();
 				scrollRight();
@@ -782,6 +605,17 @@ void overtake()
 				scrollLeft();
 				scrollUp();
 				break;
+#endif
+
+			case KEYCODE_Q:
+				restoreBackground();
+				keyPress=-1;
+				break;
+			case KEYCODE_E:
+				blitMaskedBob_screenCoordinate(assets->testbob, mouseCursorX, mouseCursorY, 128, 128);
+				keyPress=-1;
+				break;
+
 			}
 		}
 
@@ -857,9 +691,20 @@ void overtake()
 		}
 
 #endif
+
+
 		waitVBlank();
 
-		setSpriteStruct(mouseCursorX, mouseCursorY, 16);
+		if (!(custom.potinp & POTINP_DATLY_MASK))
+		{
+			toScrollY = -((SCREEN_HEIGHT/2) - mouseCursorY) / 10;
+			toScrollX = -((SCREEN_WIDTH/2) - mouseCursorX) / 10;
+			mouseSpritePtr = assets->sprite_mouseCursor2;
+		}
+		else
+			mouseSpritePtr = assets->sprite_mouseCursor1;
+
+		setSpriteStruct(mouseSpritePtr,mouseCursorX, mouseCursorY, 16);
 		constructCopperList();
 
 	}
@@ -906,9 +751,18 @@ void maustest()
 int main()
 {
 	//maustest();
+	printf("Howdy %d!\n", 42);
 	uart_printf("Howdy %d!\n", 42);
 
-	printf("Testbob: %p\n",testbob);
+
+	if (readAssets())
+		return 1;
+
+	//printf("Testbob: %p\n",testbob);
+	//printf("bitmap: %p\n",bitmap);
+	//printf("barf1: %p\n",barf1);
+	//printf("barf2: %p\n",barf2);
+	//printf("barf3: %p\n",barf3);
 	//printf("CACR = 0x%x\n",Supervisor(supervisor_getCACR));
 
 	overtake();

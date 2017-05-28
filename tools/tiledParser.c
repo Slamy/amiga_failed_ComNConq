@@ -12,7 +12,7 @@ struct enemyStart *enemies[100];
 int anz=0;
 int i,o;
 
-void main(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	assert(argc==3);
 

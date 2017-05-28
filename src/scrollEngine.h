@@ -37,10 +37,8 @@
 
 #define FRAMEBUFFER_SIZE	(FRAMEBUFFER_WIDTH/8*FRAMEBUFFER_HEIGHT*SCREEN_DEPTH + HORIZONTAL_SCROLL_WORDS*2)
 
-
 #define LEVELMAP_HEIGHT 100
 #define LEVELMAP_WIDTH 100
-
 
 void scrollUp();
 void scrollDown();
@@ -51,8 +49,22 @@ void renderFullScreen();
 void constructCopperList();
 void alignOnTileBoundary();
 int verifyVisibleWindow();
-void setSpriteStruct(int x, int y, int h);
-void blitTestBlob_mapCoordinate(uint16_t* src, int x, int y, int width, int height);
+void setSpriteStruct(uint16_t *spriteStruct, int x, int y, int h);
+void blitMaskedBob_mapCoordinate(uint16_t* src, int x, int y, int width, int height);
 void blitMaskedBob(uint16_t *dest, int shift, uint16_t* src, int width, int height );
+void blitMaskedBob_screenCoordinate(uint16_t* src, int x, int y, int width, int height);
+void restoreBackground();
+
+extern uint16_t *mouseSpritePtr;
+
+extern volatile uint16_t *bitmap;
+extern uint8_t mapData[LEVELMAP_HEIGHT*LEVELMAP_WIDTH];
+
+extern int scrollY;
+extern int scrollX;
+
+extern int debugVerticalScrollAmount;
+extern int debugHorizontalScrollAmount;
+
 
 #endif /* SRC_SCROLLENGINE_H_ */

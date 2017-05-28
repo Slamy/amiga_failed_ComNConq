@@ -7,17 +7,10 @@
 	XDEF    _supervisor_enableInterrupts
 	XDEF    _supervisor_disableInterrupts
 	XDEF	_getSR
-	XDEF	_tilemap
-	XDEF	_protrackerModule_alien
-	XDEF 	_testSoundEffect
 	XREF	_custom
 	XREF	_vBlankCounter
-	XREF	_mouseCursor
-	XREF	_supervisor_disableDataCache
-	XREF	_supervisor_getCACR
-	XREF	_testbob
 
-    section code_c
+    section .data_chip
 
 _supervisor_enableInterrupts:
 	ANDI.W   #$F0FF,SR  ;Mask off old IPL bits
@@ -46,31 +39,20 @@ _supervisor_disableDataCache:
 	rte
 
 _isr_verticalBlank:
+	;Preserve used registers
+	MOVE.W  SR, -(SP)
 	move.l	a6,-(sp)
+
 	lea.l	_custom,a6
 	move.w	#INTF_COPER, intreq(a6)		;Interrupt-Request abschalten
 
 	addi.w	#1,_vBlankCounter
 	
-	move.l	(sp)+,d6
+	;Restore used registers
+	move.l	(sp)+,a6
+	MOVE.W  (SP)+, SR
 	
 	rte
-
-_tilemap:
-	incbin "../assets/tilemap.bin"
-
-_mouseCursor:
-	incbin "../assets/mousecursor.bin"
-
-_protrackerModule_alien:
-	incbin "alien.mod"
-
-_testSoundEffect:
-	ds.w 0
-	incbin "ironchg1.raw"
-
-_testbob:
-	incbin "../assets/testbob.bin"
 
     END
 

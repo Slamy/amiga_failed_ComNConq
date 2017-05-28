@@ -9,8 +9,8 @@
 #define SRC_UART_H_
 
 
-
 void uart_printf ( const char * format, ... );
+void uart_printChar(char c);
 
 
 #endif /* SRC_UART_H_ */

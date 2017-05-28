@@ -12,7 +12,34 @@
 #include <stdarg.h>
 #include <hardware/intbits.h>
 
-extern struct Custom custom;
+extern volatile struct Custom custom;
+
+int timeoutCnt=0;
+
+void uart_printChar(char c)
+{
+	custom.serdat = c;
+
+	timeoutCnt=0;
+	while ((custom.intreqr & INTF_TBE)==0)
+	{
+		//Einfach warten
+		timeoutCnt++;
+		if (timeoutCnt > 5000)
+		{
+
+			/*
+			asm (	"ILLEGAL\n"
+				 : //no outputs
+				 : //no inputs
+				 : //no effects
+				   );
+			*/
+		}
+	}
+
+	custom.intreq = INTF_TBE;
+}
 
 void uart_printf ( const char * format, ... )
 {
@@ -26,20 +53,13 @@ void uart_printf ( const char * format, ... )
 	custom.serper = 100;
 	while (*str)
 	{
-
-		custom.serdat = *str;
-
-		while ((custom.intreqr & INTF_TBE)==0)
-		{
-			//Einfach warten
-		}
-
-		custom.intreq = INTF_TBE;
+		uart_printChar(*str);
 
 		str++;
 	}
 
 	va_end (args);
+
 }
 
 void uart_init()

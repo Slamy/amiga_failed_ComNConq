@@ -136,7 +136,7 @@ void gifToILBM(char *giffile, char *outfile, int bitplanes)
 	int transparent=-1;
 	for (i=0;i<GifFile->SavedImages->ExtensionBlockCount;i++)
 	{
-		//Reverse Engineered FIXME
+		//Reverse Engineered nötig
 		if (GifFile->SavedImages->ExtensionBlocks[i].Function==249 && GifFile->SavedImages->ExtensionBlocks[i].ByteCount==4)
 		{
 			transparent=GifFile->SavedImages->ExtensionBlocks[i].Bytes[3];
@@ -219,6 +219,7 @@ void gifToILBM(char *giffile, char *outfile, int bitplanes)
 
 	fb=fopen(outfile,"wb");
 	assert(fb!=NULL);
+
 	fwrite(bitmap,1,bitmapSize,fb);
 	fclose(fb);
 
@@ -226,6 +227,155 @@ void gifToILBM(char *giffile, char *outfile, int bitplanes)
 }
 
 
+#define TILE_WIDTH	16
+#define TILE_HEIGHT	16
+
+//Gif nach Line Interleaved Planar
+void gifTileMap16ToILBM(char *giffile, char *outfile, int bitplanes)
+{
+	int i,j,y,x;
+
+	FILE *fb;
+	GifFileType *GifFile;
+	int error;
+
+	GifFile=DGifOpenFileName(giffile,&error);
+	assert (GifFile!=NULL);
+	assert (DGifSlurp(GifFile)!=GIF_ERROR);
+
+
+	int tileCols = GifFile->Image.Width/16;
+	int tileRows = GifFile->Image.Height/16;
+
+	assert((GifFile->Image.Width%16)==0); //Bündig auf Wortbreite
+	assert((GifFile->Image.Height%16)==0); //Bündig auf Wortbreite
+
+	int width=TILE_WIDTH;
+	int height=TILE_HEIGHT;
+
+	int bytesPerLine = width/8;
+	//int wordsPerLine = width/16;
+	int bitmapSize = bytesPerLine * height * bitplanes * tileCols * tileRows;
+
+	printf ("Breite: %d   Höhe: %d   Bitplanes: %d\n",width,height,bitplanes);
+
+	uint8_t *bitmap = malloc(bitmapSize);
+	assert(bitmap);
+	uint8_t *bitmapPlanePtr[10];
+
+	/*
+	 * Ich gehe von Line Interleaved Bit Planar aus.
+	 * Zeile 0, Plane 0
+	 * Zeile 0, Plane 1
+	 * Zeile 0, Plane 2
+	 * Zeile 1, Plane 0
+	 */
+	int bitplaneByteModulo = (bitplanes-1) * bytesPerLine;
+
+	//Pointer auf die einzelnen Planes
+	for (i=0;i < bitplanes; i++)
+		bitmapPlanePtr[i] = &bitmap[bytesPerLine*i];
+
+	//wofür war das nochmal ?
+	int transparent=-1;
+	for (i=0;i<GifFile->SavedImages->ExtensionBlockCount;i++)
+	{
+		//Reverse Engineered nötig
+		if (GifFile->SavedImages->ExtensionBlocks[i].Function==249 && GifFile->SavedImages->ExtensionBlocks[i].ByteCount==4)
+		{
+			transparent=GifFile->SavedImages->ExtensionBlocks[i].Bytes[3];
+			printf ("Transparent:%d\n",transparent);
+		}
+	}
+
+	/*
+	 * Es werden immer 8 Chunky-Pixel aus dem Gif geholt und dann nach Planar übersetzt.
+	 * Der Amiga arbeitet Wort-orientiert. Aber da es eine Big Endianess Maschine ist, arbeiten wir besser
+	 * mit Bytes, um in keine Endianness-Probleme zu geraten.
+	 */
+
+	int gifPixel=0;
+	int ty,tx;
+
+	for (ty=0; ty < tileRows; ty++)
+	{
+		for (tx=0; tx < tileCols; tx++)
+		{
+	for (y=0; y < height; y++)
+	{
+
+		gifPixel = (ty * TILE_HEIGHT + y) * GifFile->Image.Width + tx * TILE_WIDTH;
+		for (x=0; x < bytesPerLine; x++)
+		{
+			uint8_t chunky[8];
+
+#ifdef DEBUG
+			printf("Chunky: ");
+#endif
+			for (i = 0; i < 8; i++)
+			{
+				if (transparent==GifFile->SavedImages->RasterBits[gifPixel])
+					chunky[i]=0;
+				else
+					chunky[i]=getIndexOfColor(GifFile->SColorMap->Colors[GifFile->SavedImages->RasterBits[gifPixel]]);
+				gifPixel++;
+#ifdef DEBUG
+				printBin(chunky[i],3);
+				printf(" ");
+#endif
+			}
+#ifdef DEBUG
+			printf("\n");
+
+			printf("Planar: ");
+#endif
+			//Wir iterieren am besten über jedes Zielwort
+			for (i=0; i < bitplanes; i++)
+			{
+				int chunkyMask = 1 << i;
+				*bitmapPlanePtr[i]=0; //Erst mal auf 0 setzen.
+
+				/*
+				 * Wir haben uns also eine Bitplane ausgesucht, die wir generieren wollen.
+				 * chunkyMask wählt das benötigte Bit aus Chunky Bytes aus.
+				 * Wir iterieren nun über jedes Bit des Zielwortes bzw.
+				 * über jedes Chunky Byte und prüfen, ob eine 1 gesetzt werden muss.
+				 */
+
+				int wordMask= 1<<(8-1);
+				for (j = 0; j < 8 ; j++)
+				{
+					if (chunky[j] & chunkyMask)
+						*bitmapPlanePtr[i] |= wordMask;
+
+					wordMask>>=1;
+				}
+
+#ifdef DEBUG
+				printBin(*bitmapPlanePtr[i],8);
+				printf(" ");
+#endif
+
+				bitmapPlanePtr[i]++;
+			}
+#ifdef DEBUG
+			printf("\n");
+#endif
+		}
+
+		//Den Modulo auf alle Bitplane pointer anwenden, da aktuelle Zeile abgeschlossen
+		for (i=0;i < bitplanes; i++)
+			bitmapPlanePtr[i]+=bitplaneByteModulo;
+	}
+	}
+	}
+	fb=fopen(outfile,"wb");
+	assert(fb!=NULL);
+	fwrite(bitmap,1,bitmapSize,fb);
+	fclose(fb);
+
+	DGifCloseFile(GifFile,&error);
+}
 
 //Gif nach Line Interleaved Planar
 void gifToMaskedAcbm(char *giffile, char *outfile, int bitplanes)
@@ -276,7 +426,7 @@ void gifToMaskedAcbm(char *giffile, char *outfile, int bitplanes)
 	int transparent=-1;
 	for (i=0;i<GifFile->SavedImages->ExtensionBlockCount;i++)
 	{
-		//Reverse Engineered FIXME
+		//Reverse Engineered nötig
 		if (GifFile->SavedImages->ExtensionBlocks[i].Function==249 && GifFile->SavedImages->ExtensionBlocks[i].ByteCount==4)
 		{
 			transparent=GifFile->SavedImages->ExtensionBlocks[i].Bytes[3];
@@ -307,6 +457,9 @@ void gifToMaskedAcbm(char *giffile, char *outfile, int bitplanes)
 					chunky[i]=TRANSPARENT_PIXEL;
 				else
 					chunky[i]=getIndexOfColor(GifFile->SColorMap->Colors[GifFile->SavedImages->RasterBits[gifPixel]]);
+
+				if (chunky[i]==0)
+					chunky[i] = TRANSPARENT_PIXEL; //0 ist auch transparent...
 				gifPixel++;
 #ifdef DEBUG
 
@@ -437,11 +590,23 @@ int main(int argc,char **argv)
 {
 	assert(argc>=2);
 
-	if (!strcmp(argv[1],"gifToPlanar"))
+	if (!strcmp(argv[1],"gifToILBM"))
 	{
 		assert(argc==6);
 		readPaletteFile(argv[3]);
 		gifToILBM(argv[2],argv[5],atoi(argv[4]));
+	}
+	else if (!strcmp(argv[1],"gifToSprite"))
+	{
+		assert(argc==5);
+		readPaletteFile(argv[3]);
+		gifToILBM(argv[2],argv[4],2);
+	}
+	else if (!strcmp(argv[1],"gifTileMap16ToILBM"))
+	{
+		assert(argc==6);
+		readPaletteFile(argv[3]);
+		gifTileMap16ToILBM(argv[2],argv[5],atoi(argv[4]));
 	}
 	else if (!strcmp(argv[1],"gifToMaskedACBM"))
 	{
@@ -449,6 +614,7 @@ int main(int argc,char **argv)
 		readPaletteFile(argv[3]);
 		gifToMaskedAcbm(argv[2],argv[5],atoi(argv[4]));
 	}
+
 	else if (!strcmp(argv[1],"gifToPalette"))
 	{
 		assert(argc==3);
@@ -459,6 +625,10 @@ int main(int argc,char **argv)
 		assert(argc==3);
 		readPaletteFile(argv[2]);
 		amigaPalette();
+	}
+	else
+	{
+		return 1;
 	}
 
 
