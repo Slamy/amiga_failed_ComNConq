@@ -1,3 +1,4 @@
+
 /*
  * game.cpp
  *
@@ -38,8 +39,9 @@ extern "C"
 	#include "ptplayerWrapper.h"
 }
 
-#include "unit.h"
-#include "astar.h"
+#include "Unit.h"
+#include "Harvester.h"
+#include "AStar.h"
 
 
 //volatile struct Custom custom;
@@ -53,8 +55,8 @@ extern unsigned char leveldata[];
 
 void gameloop();
 
-unit testUnit;
-
+Harvester testUnit;
+AStar testAStar;
 
 int main()
 {
@@ -71,8 +73,6 @@ int main()
 	{
 		mapData[i]=leveldata[i]-1;
 	}
-
-
 
 	initVideo();
 
@@ -106,15 +106,26 @@ void gameloop()
 	int16_t mouseCursorX=0;
 	int16_t mouseCursorY=0;
 
+	AStar::init();
+
 	testUnit.init();
 
-	testUnit.walkTo(8,8);
+	//testUnit.walkTo(8,8);
 
 	bool mouseLeftClick = false;
 	bool mouseLeftClickLast = false;
 
 	for(;;)
 	{
+		keyboardCheck();
+
+		switch (keyPress)
+		{
+		case KEYCODE_H:
+			testUnit.harvest(testAStar);
+			keyPress=-1;
+		}
+
 		mouseCheck();
 
 		mouseCursorX += mouseXDiff;
@@ -132,83 +143,68 @@ void gameloop()
 		if (mouseCursorY < 0)
 			mouseCursorY = 0;
 
-		waitVBlank();
-
 		mouseLeftClick=(!(ciaa.ciapra & CIAF_GAMEPORT0));
 
 		if (mouseLeftClick && !mouseLeftClickLast)
 		{
-			int tileX = (mouseCursorX - scrollX)/16;
-			int tileY = (mouseCursorY - scrollY)/16;
+			int tileX = (mouseCursorX + scrollX)/16;
+			int tileY = (mouseCursorY + scrollY)/16;
 
-			//uart_printf("Left Click %d %d %d %d\n", mouseCursorX, mouseCursorX,tileX,tileY);
-			testUnit.walkTo(tileX,tileY);
+			uart_printf("Left Click %d %d %d %d\n", mouseCursorX, mouseCursorX,tileX,tileY);
+			testUnit.walkTo(tileX,tileY,testAStar);
 		}
 
 		mouseLeftClickLast = mouseLeftClick;
-		if (!(custom.potinp & POTINP_DATLY_MASK))
+
+		if (vBlankReached())
 		{
-			toScrollY = -((SCREEN_HEIGHT/2) - mouseCursorY) / 10;
-			toScrollX = -((SCREEN_WIDTH/2) - mouseCursorX) / 10;
-			mouseSpritePtr = assets->sprite_mouseCursor2;
-		}
-		else
-			mouseSpritePtr = assets->sprite_mouseCursor1;
-
-		setSpriteStruct(mouseSpritePtr,mouseCursorX, mouseCursorY, 16);
-
-		constructCopperList();
-
-		restoreBackground();
-
-		int i;
-		for (i = 0; i < 40; i++)
-		{
-			if (toScrollY > 0)
+			if (!(custom.potinp & POTINP_DATLY_MASK))
 			{
-				scrollDown();
-				toScrollY--;
+				toScrollY = -((SCREEN_HEIGHT/2) - mouseCursorY) / 10;
+				toScrollX = -((SCREEN_WIDTH/2) - mouseCursorX) / 10;
+				mouseSpritePtr = assets->sprite_mouseCursor2;
+			}
+			else
+				mouseSpritePtr = assets->sprite_mouseCursor1;
+
+			setSpriteStruct(mouseSpritePtr,mouseCursorX, mouseCursorY, 16);
+
+			constructCopperList();
+
+			restoreBackground();
+
+			int i;
+			for (i = 0; i < 40; i++)
+			{
+				if (toScrollY > 0)
+				{
+					scrollDown();
+					toScrollY--;
+				}
+
+				if (toScrollY < 0)
+				{
+					scrollUp();
+					toScrollY++;
+				}
+
+				if (toScrollX > 0)
+				{
+					scrollRight();
+					toScrollX--;
+				}
+
+				if (toScrollX < 0)
+				{
+					scrollLeft();
+					toScrollX++;
+				}
 			}
 
-			if (toScrollY < 0)
-			{
-				scrollUp();
-				toScrollY++;
-			}
-
-			if (toScrollX > 0)
-			{
-				scrollRight();
-				toScrollX--;
-			}
-
-			if (toScrollX < 0)
-			{
-				scrollLeft();
-				toScrollX++;
-			}
-		}
-
-		/*
-		static int animCnt=0;
-		uint16_t* bobPtr=NULL;
-
-		switch (animCnt/16)
-		{
-		case 0: bobPtr = &assets->bobunit0[0*288/2]; break;
-		case 1: bobPtr = &assets->bobunit0[1*288/2]; break;
-		case 2: bobPtr = &assets->bobunit0[2*288/2]; break;
+			testUnit.simulate(testAStar);
+			testUnit.blit();
 		}
 
-		animCnt++;
-		if (animCnt>=3*16)
-			animCnt=0;
-
-		if (bobPtr)
-			blitMaskedBob_mapCoordinate(bobPtr, 64, 64, 16, 24);
-		*/
-		testUnit.simulate();
-		testUnit.blit();
 
 
 	}

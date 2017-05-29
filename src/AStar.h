@@ -33,18 +33,27 @@ struct waypoint
 	uint16_t posY;
 };
 
+#define MAX_WAYPOINT_ANZ 200
 
-#define OPEN_NODE_ANZ 100
-#define CLOSED_NODE_ANZ 200
-
-class astar
+class AStarPath
 {
 public:
-	astar();
-	virtual ~astar();
+	struct waypoint waypoints[MAX_WAYPOINT_ANZ];
+	int waypointsAnz;
+};
 
-	void init();
-	void findWay(int startX, int startY, int endX, int endY, struct waypoint* waypoints, int *wayPointAnz);
+#define OPEN_NODE_ANZ 500
+#define CLOSED_NODE_ANZ 1400
+
+class AStar
+{
+public:
+	AStar();
+	virtual ~AStar();
+
+	static void init();
+	bool findWay(int startX, int startY, int endX, int endY, AStarPath &path);
+	bool findWayToTileType(int startX, int startY, char tileId, AStarPath &path);
 	void visualize();
 
 private:
@@ -54,6 +63,8 @@ private:
 	struct node openNodes[OPEN_NODE_ANZ];
 	struct node closedNodes[CLOSED_NODE_ANZ];
 	struct node* nodeMap[LEVELMAP_HEIGHT*LEVELMAP_WIDTH];
+
+	static bool tilePassable[30];
 };
 
 #endif /* SRC_ASTAR_H_ */

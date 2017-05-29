@@ -397,9 +397,9 @@ void checkPtrBoundary(uint16_t *dest)
 void blitMaskedBob_mapCoordinate(uint16_t* src, int x, int y, int width, int height)
 {
 
-	if (x < scrollX)
+	if (x < scrollX-32)
 		return;
-	if (y < scrollY)
+	if (y < scrollY-32)
 		return;
 
 	if (x > scrollX + SCREEN_WIDTH)
@@ -1370,4 +1370,14 @@ void waitVBlank()
 	vBlankCounterLast=vBlankCounter;
 }
 
+char vBlankReached()
+{
+	if ( vBlankCounterLast != vBlankCounter)
+	{
+		vBlankCounterLast=vBlankCounter;
+		return 1;
+	}
+	else
+		return 0;
+}
 

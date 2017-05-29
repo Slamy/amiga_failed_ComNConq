@@ -12,5 +12,11 @@
 void uart_printf ( const char * format, ... );
 void uart_printChar(char c);
 
+#define ASSERT(cond) \
+	if (!(cond)) \
+	{ \
+		uart_printf("ASSERT failed at %s:%d %s\n",__FILE__,__LINE__,__func__); \
+		for(;;); \
+	}
 
 #endif /* SRC_UART_H_ */

@@ -1,3 +1,4 @@
+
 /*
  * unit.cpp
  *
@@ -34,9 +35,12 @@ extern "C"
 	#include "assets.h"
 }
 
-#include "astar.h"
-#include "unit.h"
+#include "AStar.h"
+#include "Unit.h"
 
+namespace Game
+{
+/*
 const unsigned char sineTable[]={
 	40,41,42,43,44,45,46,47,
 	48,49,50,51,52,53,54,54,
@@ -71,33 +75,31 @@ const unsigned char sineTable[]={
 	26,26,27,28,29,30,31,32,
 	33,34,35,36,37,38,39,40,
 };
+*/
 
-unit::unit()
+Unit::Unit()
 {
 	// TODO Auto-generated constructor stub
 	animCnt=0;
 	posX=16;
 	posY=16;
-	waypointAnz=0;
 }
 
-unit::~unit()
+Unit::~Unit()
 {
 	// TODO Auto-generated destructor stub
 }
 
-void unit::init()
+void Unit::init()
 {
 	animationTable[0]=&assets->bobunit0[0*288/2];
 	animationTable[1]=&assets->bobunit0[1*288/2];
 	animationTable[2]=&assets->bobunit0[2*288/2];
 }
 
-uint8_t sineIndex=0;
+//uint8_t sineIndex=0;
 
-astar testAStar;
-
-void unit::simulate()
+void Unit::simulate()
 {
 	animCnt++;
 	if (animCnt>=3*16)
@@ -107,32 +109,35 @@ void unit::simulate()
 	//posY = 50+sineTable[(sineIndex + sizeof(sineTable)/4)&0xff];
 	//sineIndex++;
 
-	if (waypointAnz)
+	if (moving)
 	{
-		//bool reachedGoal = false;
-		if (posX < waypoints[waypointAnz-1].posX)
-			posX++;
-		else if (posX > waypoints[waypointAnz-1].posX)
-			posX--;
-		else if (posY < waypoints[waypointAnz-1].posY)
-			posY++;
-		else if (posY > waypoints[waypointAnz-1].posY)
-			posY--;
+		if (posX < wayPointX)
+			posX+=4;
+		else if (posX > wayPointX)
+			posX-=4;
+		else if (posY < wayPointY)
+			posY+=4;
+		else if (posY > wayPointY)
+			posY-=4;
 		else
-		{
-			waypointAnz--;
-		}
+			moving=false;
+	}
+
+	if (!moving && path.waypointsAnz)
+	{
+		moving=true;
+		wayPointX = path.waypoints[path.waypointsAnz-1].posX * 16;
+		wayPointY = path.waypoints[path.waypointsAnz-1].posY * 16;
+		path.waypointsAnz--;
 	}
 }
 
-void unit::walkTo(int endX, int endY)
+void Unit::walkTo(int endX, int endY, AStar &astar)
 {
-	testAStar.findWay(posX/16,posY/16,endX,endY,waypoints,&waypointAnz);
+
+	astar.findWay(posX/16,posY/16,endX,endY,path);
 }
 
-void unit::blit()
-{
-	blitMaskedBob_mapCoordinate(animationTable[animCnt/16], posX, posY, 16, 24);
 }
 
 

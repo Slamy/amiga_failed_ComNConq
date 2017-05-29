@@ -45,7 +45,7 @@ void scrollDown();
 void scrollRight();
 void scrollLeft();
 void initVideo();
-void waitVBlank();
+
 void renderFullScreen();
 void constructCopperList();
 void alignOnTileBoundary();
@@ -55,6 +55,9 @@ void blitMaskedBob_mapCoordinate(uint16_t* src, int x, int y, int width, int hei
 void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int height );
 void blitMaskedBob_screenCoordinate(uint16_t* src, int x, int y, int width, int height);
 void restoreBackground();
+
+void waitVBlank();
+char vBlankReached();
 
 extern uint16_t *mouseSpritePtr;
 

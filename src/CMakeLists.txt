@@ -42,8 +42,11 @@ add_executable (tilescrollTest
 
 add_executable (game
 	game.cpp
-	unit.cpp
-	astar.cpp
+	
+	Unit.cpp
+	AStar.cpp
+	Harvester.cpp
+	
 	scrollEngine.c
 	uart.c
 	assets.c

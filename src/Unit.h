@@ -9,26 +9,32 @@
 #define SRC_UNIT_H_
 
 #include <stdint.h>
-#include "astar.h"
 
-class unit
+#include "AStar.h"
+
+namespace Game
+{
+
+class Unit
 {
 public:
-	unit();
-	virtual ~unit();
+	Unit();
+	virtual ~Unit();
 
 	void simulate();
 	void blit();
 	void init();
-	void walkTo(int endX, int endY);
+	void walkTo(int endX, int endY, AStar &astar);
 
-private:
+protected:
 	uint16_t posX, posY;
 	uint8_t animCnt;
 
 	uint16_t* animationTable[10];
-	struct waypoint waypoints[30];
-	int waypointAnz;
+	AStarPath path;
+	uint16_t wayPointX, wayPointY;
+	bool moving;
 };
 
+}
 #endif /* SRC_UNIT_H_ */
