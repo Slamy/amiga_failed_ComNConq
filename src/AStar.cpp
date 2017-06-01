@@ -99,6 +99,9 @@ bool AStar::findWay(int startX, int startY, int endX, int endY, AStarPath &path)
 
 	struct node* endPtr = NULL;
 
+	if (tilePassable[mapData[endY * LEVELMAP_WIDTH + endX]] == false)
+		return false;
+
 	for (;;)
 	{
 		//Wir suchen nun nach dem openNode der am nächsten am Ziel ist. Wir nehmen an, es ist der 1. und suchen nach besseren

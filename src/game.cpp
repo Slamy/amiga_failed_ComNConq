@@ -47,6 +47,8 @@ extern "C"
 //volatile struct Custom custom;
 //volatile struct CIA ciaa, ciab;
 
+int __nocommandline = 1;
+int __oslibversion = 34;
 
 extern volatile struct Custom custom;
 extern volatile struct CIA ciaa, ciab;
@@ -92,6 +94,42 @@ int main()
 #endif
 
 	mouseInit();
+
+	//Color Palette
+	custom.color[0] = 0x0000;
+	custom.color[1] = 0x0121;
+	custom.color[2] = 0x0421;
+	custom.color[3] = 0x0322;
+	custom.color[4] = 0x0710;
+	custom.color[5] = 0x0a00;
+	custom.color[6] = 0x0641;
+	custom.color[7] = 0x0353;
+	custom.color[8] = 0x0e21;
+	custom.color[9] = 0x0362;
+	custom.color[10] = 0x0684;
+	custom.color[11] = 0x0c65;
+	custom.color[12] = 0x0682;
+	custom.color[13] = 0x0888;
+	custom.color[14] = 0x0e71;
+	custom.color[15] = 0x069b;
+	custom.color[16] = 0x0991;
+	custom.color[17] = 0x00a0;
+	custom.color[18] = 0x00e0;
+	custom.color[19] = 0x0fff;
+	custom.color[20] = 0x0aaa;
+	custom.color[21] = 0x09bd;
+	custom.color[22] = 0x0ace;
+	custom.color[23] = 0x0dcb;
+	custom.color[24] = 0x0ddd;
+	custom.color[25] = 0x0ed4;
+	custom.color[26] = 0x0eee;
+	custom.color[27] = 0x0fea;
+	custom.color[28] = 0x0000;
+	custom.color[29] = 0x0000;
+	custom.color[30] = 0x0000;
+	custom.color[31] = 0x0000;
+
+
 	gameloop();
 
 	return 0;
@@ -152,9 +190,9 @@ void gameloop()
 
 			uart_printf("Left Click %d %d %d %d\n", mouseCursorX, mouseCursorX,tileX,tileY);
 			testUnit.walkTo(tileX,tileY,testAStar);
+			//alterTile(tileX, tileY, 0);
 		}
 
-		mouseLeftClickLast = mouseLeftClick;
 
 		if (vBlankReached())
 		{
@@ -163,11 +201,15 @@ void gameloop()
 				toScrollY = -((SCREEN_HEIGHT/2) - mouseCursorY) / 10;
 				toScrollX = -((SCREEN_WIDTH/2) - mouseCursorX) / 10;
 				mouseSpritePtr = assets->sprite_mouseCursor2;
+				setSpriteStruct(mouseSpritePtr,mouseCursorX, mouseCursorY, 18);
 			}
 			else
+			{
 				mouseSpritePtr = assets->sprite_mouseCursor1;
+				setSpriteStruct(mouseSpritePtr,mouseCursorX, mouseCursorY, 16);
+			}
 
-			setSpriteStruct(mouseSpritePtr,mouseCursorX, mouseCursorY, 16);
+
 
 			constructCopperList();
 
@@ -202,9 +244,12 @@ void gameloop()
 			}
 
 			testUnit.simulate(testAStar);
+			blitAlteredTiles();
+
 			testUnit.blit();
 		}
 
+		mouseLeftClickLast = mouseLeftClick;
 
 
 	}

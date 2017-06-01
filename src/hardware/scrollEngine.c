@@ -323,42 +323,6 @@ void initVideo()
 	custom.diwstrt=0x2C81; //Display Window Start bei Vertikal 44, Horizontal 129
 	custom.diwstop=0x2CC1; //Ende bei Vertikal 300, Horizontal 449
 
-	//Farbpalette
-	custom.color[0] = 0x0000;
-	custom.color[1] = 0x0121;
-	custom.color[2] = 0x0421;
-	custom.color[3] = 0x0322;
-	custom.color[4] = 0x0710;
-	custom.color[5] = 0x0a00;
-	custom.color[6] = 0x0641;
-	custom.color[7] = 0x0353;
-	custom.color[8] = 0x0e21;
-	custom.color[9] = 0x0362;
-	custom.color[10] = 0x0684;
-	custom.color[11] = 0x0c65;
-	custom.color[12] = 0x0682;
-	custom.color[13] = 0x0888;
-	custom.color[14] = 0x0e71;
-	custom.color[15] = 0x069b;
-	custom.color[16] = 0x0991;
-
-	custom.color[17] = 0x00a0;
-	custom.color[18] = 0x00e0;
-	custom.color[19] = 0x0fff;
-	custom.color[20] = 0x0aaa;
-
-	custom.color[21] = 0x09bd;
-	custom.color[22] = 0x0ace;
-	custom.color[23] = 0x0dcb;
-	custom.color[24] = 0x0ddd;
-	custom.color[25] = 0x0ed4;
-	custom.color[26] = 0x0ddd;
-	custom.color[27] = 0x0fea;
-
-	custom.color[28] = 0x00a0;
-	custom.color[29] = 0x00e0;
-	custom.color[30] = 0x0fff;
-	custom.color[31] = 0x0aaa;
 
 	//topLeftWord = bitmap;
 	//firstFetchWord = topLeftWord-EXTRA_FETCH_WORDS;
@@ -771,6 +735,48 @@ static void blitTile(uint8_t tileid, uint16_t *dest)
 		dest+=FRAMEBUFFER_WIDTH/16;
 	}
 #endif
+}
+
+
+struct
+{
+	uint16_t *dest;
+	uint8_t tileid;
+} alteredTileBlits[10];
+uint16_t alteredTileBlitsAnz=0;
+
+
+void alterTile(uint16_t x, uint16_t y, uint8_t tileid)
+{
+	//first set inside the map data
+	mapData[x + y * LEVELMAP_WIDTH] = tileid;
+
+	int tileScrollX = scrollX/16;
+	int tileScrollY = scrollY/16;
+
+	//is this tile in the current window that is kept stable for scrolling ?
+	if (x > tileScrollX -1 && x < tileScrollX + SCREEN_WIDTH/16 + 1 &&
+			y > tileScrollY -1 && y < tileScrollY + SCREEN_HEIGHT/16 + 1) //FIXME formula might be wrong
+	{
+		uint16_t *dest = topLeft.dest + FRAMEBUFFER_LINE_PITCH/2*16 * (y - tileScrollY + 1) + (x - tileScrollX + 1);
+		if (dest >= lastFetchWord)
+			dest -= FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
+
+		alteredTileBlits[alteredTileBlitsAnz].dest = dest;
+		alteredTileBlits[alteredTileBlitsAnz].tileid = tileid;
+		alteredTileBlitsAnz++;
+		//blitTile(tileid, dest);
+	}
+}
+
+void blitAlteredTiles()
+{
+	uint16_t i;
+	for (i=0; i< alteredTileBlitsAnz;i++)
+	{
+		blitTile(alteredTileBlits[i].tileid, alteredTileBlits[i].dest);
+	}
+	alteredTileBlitsAnz=0;
 }
 
 static inline int verifyTile(uint8_t tileid, volatile uint16_t *dest)

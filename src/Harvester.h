@@ -16,6 +16,7 @@ public:
 	void simulate(AStar &astar);
 	void harvest(AStar &astar);
 	void blit();
+	void init();
 
 	Harvester();
 	virtual ~Harvester();

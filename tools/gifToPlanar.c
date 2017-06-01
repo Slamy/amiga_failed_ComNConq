@@ -22,6 +22,7 @@ struct paletteEntry
 	uint8_t r;
 	uint8_t g;
 	uint8_t b;
+	char* comment;
 
 } palette[MAX_PALETTE_SIZE];
 
@@ -72,15 +73,27 @@ void readPaletteFile (char *path)
 		if (buf[0]!='\n')
 		{
 			int red,green,blue;
+			//char comment[200];
 
-			assert (sscanf(buf,"%d %d %d",&red,&green,&blue)!=EOF);
+			char *readPtr = buf;
+			red = strtol(readPtr, &readPtr, 10);
+			assert(readPtr);
+			green = strtol(readPtr, &readPtr, 10);
+			assert(readPtr);
+			blue = strtol(readPtr, &readPtr, 10);
+			assert(readPtr);
+			while (*readPtr=='\t' || *readPtr==' ')
+				readPtr++;
 
-			//printf ("%d\n",index);
-			assert(paletteEntrys<=MAX_PALETTE_SIZE);
+			//assert (sscanf(buf,"%d %d %d %s",&red,&green,&blue, &comment)!=EOF);
+			//printf("%d %d %d %d\n",paletteEntrys,red,green,blue);
+			//printf ("%s",readPtr);
+			//assert(paletteEntrys<=MAX_PALETTE_SIZE);
 
 			palette[paletteEntrys].r=red;
 			palette[paletteEntrys].g=green;
 			palette[paletteEntrys].b=blue;
+			palette[paletteEntrys].comment=strdup(readPtr);
 
 			paletteEntrys++;
 
@@ -396,8 +409,14 @@ void gifToMaskedAcbm(char *giffile, char *outfile, int bitplanes)
 	int bytesPerLine = width/8;
 	//int wordsPerLine = width/16;
 	int bitmapSize = bytesPerLine * height * (bitplanes+1);
+	int maxColors=1;
 
-	printf ("Breite: %d   Höhe: %d   Bitplanes: %d\n",width,height,bitplanes);
+	for (i=0; i< bitplanes; i++)
+	{
+		maxColors*=2;
+	}
+
+	printf ("Breite: %d   Höhe: %d   Bitplanes: %d / %d\n",width,height,bitplanes, maxColors);
 
 	assert((width%16)==0); //Bündig auf Wortbreite
 
@@ -458,8 +477,8 @@ void gifToMaskedAcbm(char *giffile, char *outfile, int bitplanes)
 				else
 					chunky[i]=getIndexOfColor(GifFile->SColorMap->Colors[GifFile->SavedImages->RasterBits[gifPixel]]);
 
-				if (chunky[i]==0)
-					chunky[i] = TRANSPARENT_PIXEL; //0 ist auch transparent...
+				if (chunky[i] >= maxColors)
+					chunky[i] = TRANSPARENT_PIXEL; //keine erreichbare Farbe ist auch transparent...
 				gifPixel++;
 #ifdef DEBUG
 
@@ -585,6 +604,21 @@ void amigaPalette()
 	}
 }
 
+void gimpPalette()
+{
+	int i;
+	printf("GIMP Palette\n");
+	printf("Name: Export\n");
+	printf("#\n");
+	for (i=0;i<paletteEntrys;i++)
+	{
+		unsigned int r = (palette[i].r << 4) | palette[i].r;
+		unsigned int g = (palette[i].g << 4) | palette[i].g;
+		unsigned int b = (palette[i].b << 4) | palette[i].b;
+
+		printf("%d %d %d\t%s",r,g,b,palette[i].comment);
+	}
+}
 
 int main(int argc,char **argv)
 {
@@ -625,6 +659,12 @@ int main(int argc,char **argv)
 		assert(argc==3);
 		readPaletteFile(argv[2]);
 		amigaPalette();
+	}
+	else if (!strcmp(argv[1],"gimpPalette"))
+	{
+		assert(argc==3);
+		readPaletteFile(argv[2]);
+		gimpPalette();
 	}
 	else
 	{

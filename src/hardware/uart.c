@@ -62,6 +62,16 @@ void uart_printf ( const char * format, ... )
 
 }
 
+void uart_puts(char *str)
+{
+	while (*str)
+	{
+		uart_printChar(*str);
+
+		str++;
+	}
+}
+
 void uart_init()
 {
 

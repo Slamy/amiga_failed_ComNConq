@@ -55,6 +55,8 @@ void blitMaskedBob_mapCoordinate(uint16_t* src, int x, int y, int width, int hei
 void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int height );
 void blitMaskedBob_screenCoordinate(uint16_t* src, int x, int y, int width, int height);
 void restoreBackground();
+void alterTile(uint16_t x, uint16_t y, uint8_t tileid);
+void blitAlteredTiles();
 
 void waitVBlank();
 char vBlankReached();

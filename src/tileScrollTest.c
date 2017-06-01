@@ -37,6 +37,8 @@ extern volatile struct CIA ciaa, ciab;
 
 extern unsigned char leveldata[];
 
+int __nocommandline = 1;
+int __oslibversion = 34;
 
 void startDebugger() //stub function
 {

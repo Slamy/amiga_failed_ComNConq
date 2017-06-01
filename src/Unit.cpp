@@ -92,19 +92,13 @@ Unit::~Unit()
 
 void Unit::init()
 {
-	animationTable[0]=&assets->bobunit0[0*288/2];
-	animationTable[1]=&assets->bobunit0[1*288/2];
-	animationTable[2]=&assets->bobunit0[2*288/2];
+
 }
 
 //uint8_t sineIndex=0;
 
 void Unit::simulate()
 {
-	animCnt++;
-	if (animCnt>=3*16)
-		animCnt=0;
-
 	//posX = 50+sineTable[sineIndex];
 	//posY = 50+sineTable[(sineIndex + sizeof(sineTable)/4)&0xff];
 	//sineIndex++;

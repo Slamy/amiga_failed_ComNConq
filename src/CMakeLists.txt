@@ -9,35 +9,46 @@ set(CROSS_COMPILE m68k-amigaos-)
 SET(CMAKE_C_COMPILER   m68k-amigaos-gcc)
 SET(CMAKE_CXX_COMPILER   m68k-amigaos-g++)
 
-SET(CMAKE_C_FLAGS " -mcpu=68020 -g -Wall -noixemul -O2 ")
-SET(CMAKE_CXX_FLAGS " -mcpu=68020 -g -Wall -noixemul -O2 ")
+#SET(OPTIMIZE_FLAGS " -fdefer-pop -fmerge-constants -fthread-jumps -floop-optimize -fif-conversion -fif-conversion2 -fdelayed-branch -fguess-branch-probability -fcprop-registers ")
+#SET(OPTIMIZE_FLAGS " ${OPTIMIZE_FLAGS} -fomit-frame-pointer ")
+SET(OPTIMIZE_FLAGS " -O1 -fomit-frame-pointer -fno-exceptions")
 
+#SET(OPTIMIZE_FLAGS " -fomit-frame-pointer -fauto-inc-dec -fbranch-count-reg -fcombine-stack-adjustments -fcompare-elim -fcprop-registers -fdce -fdefer-pop -fdelayed-branch -fdse -fforward-propagate -fguess-branch-probability -fif-conversion2 -fif-conversion -finline-functions-called-once -fipa-pure-const -fipa-profile -fipa-reference -fmerge-constants -fmove-loop-invariants -freorder-blocks -fshrink-wrap -fsplit-wide-types -fssa-backprop -fssa-phiopt -ftree-bit-ccp -ftree-ccp -ftree-ch -ftree-coalesce-vars -ftree-copy-prop -ftree-dce -ftree-dominator-opts -ftree-dse -ftree-forwprop -ftree-fre -ftree-phiprop -ftree-sink -ftree-slsr -ftree-sra -ftree-pta -ftree-ter -funit-at-a-time ")
+
+SET(CMAKE_C_FLAGS " -mcrt=nix13 -mcpu=68000 -Wall ${OPTIMIZE_FLAGS} ")
+SET(CMAKE_CXX_FLAGS "-mcrt=nix13  -mcpu=68000 -Wall ${OPTIMIZE_FLAGS} ")
 #SET(CMAKE_C_LINK_FLAGS " -Wl,--print-gc-sections")
 
 #SET(CMAKE_C_LINK_FLAGS " -Wl,-Map=output.map -T ${CMAKE_CURRENT_SOURCE_DIR}/script.ld -Wl,-verbose ")
-#SET(CMAKE_C_LINK_FLAGS " -Wl,-Map=output.map -Wl,-verbose ")
+# -Wl,-Map=output.map -Wl,-verbose
+SET(CMAKE_C_LINK_FLAGS " -mcrt=nix13  -v")
+#SET(CMAKE_CXX_LINK_FLAGS " -mcrt=nix13  -v -Wl,-verbose")
+SET(CMAKE_CXX_LINK_FLAGS " -nodefaultlibs  -mcrt=nix13 -m68000 ")
+
 
 #Vermeidet -rdynamic
 set(CMAKE_C_LINK_EXECUTABLE "<CMAKE_C_COMPILER>  <FLAGS> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET>")
-set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER>  <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET>")
+set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER>  <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> \
+	-lnixmain -lm -lstdc++ -lnix -lstubs -lnix13 -lnix13 -lamiga -lstubs -lgcc -lnix -lnix13 -lnix13")
 
 #set(CMAKE_C_LINK_EXECUTABLE "vc  <FLAGS> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET>")
 
 #SET(CMAKE_C_LINKER  vlink)
 
 enable_language(ASM-VASM)
-SET(CMAKE_ASM-VASM_FLAGS " -Faout -quiet -x -m68020 -spaces -showopt ")
+SET(CMAKE_ASM-VASM_FLAGS " -Faout -quiet -x -m68000 -spaces -showopt ")
 
 
 add_executable (tilescrollTest
 	tileScrollTest.c
-	scrollEngine.c
-	uart.c
+	hardware/scrollEngine.c
+	hardware/uart.c
 	assets.c
-	input.c
-	asmstuff.s
-	../ptplayer/ptplayer_noa4.o
+	hardware/input.c
+	hardware/asmstuff.s
+	ptplayer/ptplayer_noa4.s
 	../assets/leveldata.c
+	ptplayerWrapper.c
 	)
 
 add_executable (game
@@ -47,20 +58,30 @@ add_executable (game
 	AStar.cpp
 	Harvester.cpp
 	
-	scrollEngine.c
-	uart.c
+	hardware/scrollEngine.c
+	hardware/uart.c
 	assets.c
-	input.c
-	asmstuff.s
-	../ptplayer/ptplayer_noa4.o
+	hardware/input.c
+	hardware/asmstuff.s
+	ptplayer/ptplayer_noa4.s
 	../assets/leveldata.c
+	ptplayerWrapper.c
 	)
 	
 set_source_files_properties (../assets/leveldata.c PROPERTY GENERATED)
 	
 target_include_directories (tilescrollTest PUBLIC
-	../ptplayer
+	ptplayer
 	../assets
+	hardware
+	.
+	)
+	
+target_include_directories (game PUBLIC
+	ptplayer
+	../assets
+	hardware
+	.
 	)
 
 add_dependencies (game assets)

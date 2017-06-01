@@ -25,19 +25,6 @@ _getSR:
 	move.w SR,d0
 	rte
 
-_supervisor_getCACR:
-	movec cacr,d0
-	rte
-
-_supervisor_disableDataCache:
-	movec cacr,d0
-	bset #0,d0 ; i cache on
-	bset #4,d0 ; i burst on
-	bclr #8,d0 ; d cache off
-	bclr #12,d0 ; d burst off
-	movec d0,cacr
-	rte
-
 _isr_verticalBlank:
 	;Preserve used registers
 	MOVE.W  SR, -(SP)
