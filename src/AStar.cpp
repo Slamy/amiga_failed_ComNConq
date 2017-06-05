@@ -6,6 +6,8 @@
  */
 
 #include "AStar.h"
+#include "Unit.h"
+
 extern "C"
 {
 #include "uart.h"
@@ -13,6 +15,7 @@ extern "C"
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 
 //#define DEBUG
@@ -53,9 +56,14 @@ void AStar::visualize()
 			c = '.';
 
 			if (nodeMap[x + y*LEVELMAP_WIDTH])
-				c = 'X';
+			{
+				if (nodeMap[x + y*LEVELMAP_WIDTH] >= closedNodes)
+					c = 'X';
+				else
+					c = 'O';
+			}
 			else if (tilePassable[mapData[y * LEVELMAP_WIDTH + x]] == false)
-				c = 'O';
+				c = '#';
 
 			//c = mapData[y * LEVELMAP_WIDTH + x] + '0';
 
@@ -67,24 +75,56 @@ void AStar::visualize()
 }
 
 static const int16_t newPosXTable[]={
-		1,
-		0,
+		1,	//East
+		0,	//South
+		-1,	//West
+		0,	//North
+
 		-1,
-		0
+		1,
+		-1,
+		1
+
 };
 
 static const int16_t newPosYTable[]={
-		0,
+		0, //East
+		1, //South
+		0, //West
+		-1,//North
+
+		-1,
+		-1,
 		1,
-		0,
-		-1
+		1,
 };
 
-bool AStar::findWay(int startX, int startY, int endX, int endY, AStarPath &path)
+//#define COST_FUNCTION(X1,X2,Y1,Y2) abs(X1 - X2) + abs(Y1 - Y2)
+
+#define COST_ORTHO		100
+#define COST_DIAGONAL	141
+
+#define COST_FUNCTION(X1,X2,Y1,Y2) sqrt(((X1 - X2)*(X1 - X2) + (Y1 - Y2)*(Y1 - Y2))*COST_ORTHO ) //FIXME Optimieren?
+
+static const int16_t newPosCostTable[]={
+		COST_ORTHO,
+		COST_ORTHO,
+		COST_ORTHO,
+		COST_ORTHO,
+
+		COST_DIAGONAL,
+		COST_DIAGONAL,
+		COST_DIAGONAL,
+		COST_DIAGONAL,
+};
+
+
+
+bool AStar::findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, AStarPath &path)
 {
 	memset(nodeMap, 0, sizeof(nodeMap));
 
-	openNodes[0].costHeuristic = abs(startX - endX) + abs(startY - endY);
+	openNodes[0].costHeuristic = COST_FUNCTION(startX,endX,startY,endY);
 	openNodes[0].posX = startX;
 	openNodes[0].posY = startY;
 	openNodes[0].costYet = 0;
@@ -166,18 +206,17 @@ bool AStar::findWay(int startX, int startY, int endX, int endY, AStarPath &path)
 
 		//Erzeugen wir nun maximal 4 weitere open nodes in seiner Nähe
 
-		for (i = 0; i < 4; i++)
+		for (i = 0; i < 8; i++)
 		{
 			uint16_t newX = workNode->posX + newPosXTable[i];
 			uint16_t newY = workNode->posY + newPosYTable[i];
 
 			//Teste, ob diese Position überhaupt möglich ist.
 
-			if ( newY>= 0 && newX >= 0 && tilePassable[mapData[newY * LEVELMAP_WIDTH + newX]] == true) //FIXME Magic number
+			if ( newY>= 0 && newX >= 0 && tilePassable[mapData[newY * LEVELMAP_WIDTH + newX]] == true && Game::Unit::unitAt(newX, newY)==NULL)
 			{
-				uint16_t newCostHeuristic = abs(newX - endX)
-						+ abs(newY - endY);
-				uint16_t newCostSum = newCostHeuristic + workNode->costYet + 1;
+				uint16_t newCostHeuristic = COST_FUNCTION(newX,endX,newY,endY);
+				uint16_t newCostSum = newCostHeuristic + workNode->costYet + newPosCostTable[i];
 
 				//Gibt es schon einen Node auf diesem Feld?
 				struct node *ptr = NULL;
@@ -214,7 +253,7 @@ bool AStar::findWay(int startX, int startY, int endX, int endY, AStarPath &path)
 					ptr->posX = newX;
 					ptr->posY = newY;
 					ptr->costHeuristic = newCostHeuristic;
-					ptr->costYet = workNode->costYet + 1;
+					ptr->costYet = workNode->costYet + newPosCostTable[i];
 					ptr->costSum = newCostSum;
 					ptr->fromX = workNode->posX;
 					ptr->fromY = workNode->posY;
@@ -268,7 +307,7 @@ bool AStar::findWay(int startX, int startY, int endX, int endY, AStarPath &path)
 }
 
 
-bool AStar::findWayToTileType(int startX, int startY, char targetTileId, AStarPath &path)
+bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdMin, char targetTileIdMax, AStarPath &path)
 {
 	memset(nodeMap, 0, sizeof(nodeMap));
 
@@ -338,8 +377,8 @@ bool AStar::findWayToTileType(int startX, int startY, char targetTileId, AStarPa
 		visualize();
 #endif
 		//Node vielleicht schon das Ziel?
-
-		if (mapData[workNode->posY * LEVELMAP_WIDTH + workNode->posX] == targetTileId)
+		uint8_t workNodeTileId = mapData[workNode->posY * LEVELMAP_WIDTH + workNode->posX];
+		if (workNodeTileId >= targetTileIdMin && workNodeTileId <= targetTileIdMax)
 		{
 			//Ziel erreicht.
 			endPtr = &openNodes[bestOpenNode];
@@ -355,7 +394,7 @@ bool AStar::findWayToTileType(int startX, int startY, char targetTileId, AStarPa
 
 			//Teste, ob diese Position überhaupt möglich ist.
 
-			if ( newY>= 0 && newX >= 0 && tilePassable[mapData[newY * LEVELMAP_WIDTH + newX]] == true) //FIXME Magic number
+			if ( newY>= 0 && newX >= 0 && tilePassable[mapData[newY * LEVELMAP_WIDTH + newX]] == true && Game::Unit::unitAt(newX, newY)==NULL)
 			{
 				uint16_t newCostYet = workNode->costYet + 1;
 
@@ -382,10 +421,8 @@ bool AStar::findWayToTileType(int startX, int startY, char targetTileId, AStarPa
 					openNodesAnz++;
 					nodeMap[newY * LEVELMAP_WIDTH + newX] = ptr;
 #ifdef DEBUG
-					uart_printf("Neuer Open Node %d %d   %d + %d = %d \n",newX, newY,
-							newCostHeuristic,
-							workNode->costYet + 1,
-							newCostSum);
+					uart_printf("Neuer Open Node %d %d  %d \n",newX, newY,
+							workNode->costYet + 1);
 #endif
 				}
 

@@ -77,22 +77,30 @@ const unsigned char sineTable[]={
 };
 */
 
+AStar Unit::sharedAstar;
+Unit* Unit::presenceMap[LEVELMAP_HEIGHT * LEVELMAP_WIDTH];
+
 Unit::Unit()
 {
-	// TODO Auto-generated constructor stub
+	uart_printf("Unit Constructor\n");
 	animCnt=0;
-	posX=16;
-	posY=16;
+	posX=0;
+	posY=0;
+	tileX=0;
+	tileY=0;
+	alive=false;
+	wayPointX=0;
+	wayPointY=0;
+	moving=false;
+	targetX=0;
+	targetY=0;
+	facingDirection=N;
 }
 
 Unit::~Unit()
 {
-	// TODO Auto-generated destructor stub
-}
-
-void Unit::init()
-{
-
+	alive=false;
+	moving=false;
 }
 
 //uint8_t sineIndex=0;
@@ -105,33 +113,127 @@ void Unit::simulate()
 
 	if (moving)
 	{
+		moving=false;
+
 		if (posX < wayPointX)
-			posX+=4;
+		{
+			posX+=1;
+			moving=true;
+		}
 		else if (posX > wayPointX)
-			posX-=4;
-		else if (posY < wayPointY)
-			posY+=4;
+		{
+			posX-=1;
+			moving=true;
+		}
+
+		if (posY < wayPointY)
+		{
+			posY+=1;
+			moving=true;
+		}
 		else if (posY > wayPointY)
-			posY-=4;
-		else
-			moving=false;
+		{
+			posY-=1;
+			moving=true;
+		}
+
 	}
 
 	if (!moving && path.waypointsAnz)
 	{
-		moving=true;
-		wayPointX = path.waypoints[path.waypointsAnz-1].posX * 16;
-		wayPointY = path.waypoints[path.waypointsAnz-1].posY * 16;
-		path.waypointsAnz--;
+		uint16_t newTileX = path.waypoints[path.waypointsAnz-1].posX;
+		uint16_t newTileY = path.waypoints[path.waypointsAnz-1].posY;
+
+		//Können wir uns überhaupt auf das neue Tile bewegen?
+		if (presenceMap[newTileX + newTileY * LEVELMAP_WIDTH] == NULL || presenceMap[newTileX + newTileY * LEVELMAP_WIDTH] == this)
+		{
+			moving=true;
+
+			//FIXME Mit LUT... oder ?
+			if (newTileX > tileX)
+			{
+				if (newTileY > tileY)
+					facingDirection = SE;
+				else if (newTileY < tileY)
+					facingDirection = NE;
+				else
+					facingDirection = E;
+			}
+			else if (newTileX < tileX)
+			{
+				if (newTileY > tileY)
+					facingDirection = SW;
+				else if (newTileY < tileY)
+					facingDirection = NW;
+				else
+					facingDirection = W;
+			}
+			else
+			{
+				if (newTileY > tileY)
+					facingDirection = S;
+				else
+					facingDirection = N;
+			}
+
+			//Da wo ich vorher war, bin ich nicht mehr.
+			presenceMap[tileX + tileY * LEVELMAP_WIDTH] = NULL;
+
+			//Belege den nun nächsten Tile als meine Position, obwohl ich noch nicht da bin.
+			tileX = newTileX;
+			tileY = newTileY;
+			presenceMap[tileX + tileY * LEVELMAP_WIDTH] = this;
+
+
+			wayPointX = tileX * 16;
+			wayPointY = tileY * 16;
+
+			path.waypointsAnz--;
+		}
+		else
+		{
+			path.waypointsAnz = 0;
+			uart_printf("Plötzlich was im Weg... versuche neue Route\n");
+			if (sharedAstar.findWay(tileX,tileY,targetX,targetY,path))
+			{
+				uart_printf("Glück gehabt.\n");
+			}
+			else
+			{
+				uart_printf("Kein neuer Weg gefunden\n");
+			}
+		}
 	}
 }
 
-void Unit::walkTo(int endX, int endY, AStar &astar)
+bool Unit::walkTo(int16_t endX, int16_t endY)
 {
+	if (sharedAstar.findWay(tileX,tileY,endX,endY,path))
+	{
+		targetX = endX;
+		targetY = endY;
+		return true;
+	}
 
-	astar.findWay(posX/16,posY/16,endX,endY,path);
+	return false;
 }
 
+
+Unit* Unit::unitAt(int16_t tileX, int16_t tileY)
+{
+
+	return presenceMap[tileX + tileY* LEVELMAP_WIDTH];
+}
+
+
+}
+
+
+
+void *operator new (size_t size, Game::UnitPool& pool)
+{
+	uart_assert(size <= sizeof(Game::PaddedUnit));
+    return pool.allocate();
 }
 
 

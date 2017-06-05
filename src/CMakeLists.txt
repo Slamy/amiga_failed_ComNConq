@@ -22,8 +22,8 @@ SET(CMAKE_CXX_FLAGS "-mcrt=nix13  -mcpu=68000 -Wall ${OPTIMIZE_FLAGS} ")
 #SET(CMAKE_C_LINK_FLAGS " -Wl,-Map=output.map -T ${CMAKE_CURRENT_SOURCE_DIR}/script.ld -Wl,-verbose ")
 # -Wl,-Map=output.map -Wl,-verbose
 SET(CMAKE_C_LINK_FLAGS " -mcrt=nix13  -v")
-#SET(CMAKE_CXX_LINK_FLAGS " -mcrt=nix13  -v -Wl,-verbose")
-SET(CMAKE_CXX_LINK_FLAGS " -nodefaultlibs  -mcrt=nix13 -m68000 ")
+#SET(CMAKE_CXX_LINK_FLAGS " -mcrt=nix13  -v -Wl,-verbose ")
+SET(CMAKE_CXX_LINK_FLAGS " -nodefaultlibs  -mcrt=nix13 -m68000 -Wl,-Map=output.map ")
 
 
 #Vermeidet -rdynamic
@@ -47,8 +47,8 @@ add_executable (tilescrollTest
 	hardware/input.c
 	hardware/asmstuff.s
 	ptplayer/ptplayer_noa4.s
+	ptplayer/ptplayerWrapper.c
 	../assets/leveldata.c
-	ptplayerWrapper.c
 	)
 
 add_executable (game
@@ -57,6 +57,7 @@ add_executable (game
 	Unit.cpp
 	AStar.cpp
 	Harvester.cpp
+	Tank.cpp
 	
 	hardware/scrollEngine.c
 	hardware/uart.c
@@ -64,8 +65,8 @@ add_executable (game
 	hardware/input.c
 	hardware/asmstuff.s
 	ptplayer/ptplayer_noa4.s
+	ptplayer/ptplayerWrapper.c
 	../assets/leveldata.c
-	ptplayerWrapper.c
 	)
 	
 set_source_files_properties (../assets/leveldata.c PROPERTY GENERATED)

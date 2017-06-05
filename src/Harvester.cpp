@@ -13,11 +13,28 @@ extern "C"
 #include "assets.h"
 }
 
-Harvester::Harvester()
-{
-	// TODO Auto-generated constructor stub
-	harvestedOre = 0;
+#define HARVESTER_CAPACITY 8
 
+Harvester::Harvester(int16_t tileX, int16_t tileY)
+{
+
+	harvestedOre = 0;
+	state = STATE_IDLE;
+	alive=true;
+	this->tileX = tileX;
+	this->tileY = tileY;
+
+	posX = tileX * 16;
+	posY = tileY * 16;
+
+	animationTable[0]=&assets->bobunit0[0*288/2];
+	animationTable[1]=&assets->bobunit0[1*288/2];
+	animationTable[2]=&assets->bobunit0[2*288/2];
+	animationTable[3]=&assets->bobunit0[3*288/2];
+
+	uart_printf("Harvester Constructor %d %d\n",tileX,tileY);
+
+	presenceMap[tileX + tileY * LEVELMAP_WIDTH] = this;
 }
 
 Harvester::~Harvester()
@@ -25,26 +42,18 @@ Harvester::~Harvester()
 	// TODO Auto-generated destructor stub
 }
 
-void Harvester::harvest(AStar &astar)
+void Harvester::harvest()
 {
 	state = STATE_HARVEST_IDLE;
 }
 
-void Harvester::init()
+bool Harvester::specialAction()
 {
-
-	animationTable[0]=&assets->bobunit0[0*288/2];
-	animationTable[1]=&assets->bobunit0[1*288/2];
-	animationTable[2]=&assets->bobunit0[2*288/2];
-	animationTable[3]=&assets->bobunit0[3*288/2];
-
-	uart_printf("%p\n",animationTable[0]);
-	uart_printf("%p\n",animationTable[1]);
-	uart_printf("%p\n",animationTable[2]);
-	uart_printf("%p\n",animationTable[3]);
+	harvest();
+	return true;
 }
 
-void Harvester::simulate(AStar &astar)
+void Harvester::simulate()
 {
 	Unit::simulate();
 
@@ -55,12 +64,12 @@ void Harvester::simulate(AStar &astar)
 	switch (state)
 	{
 	case STATE_HARVEST_IDLE:
-		if (harvestedOre < 4 && astar.findWayToTileType(posX / 16, posY / 16, 25, path) == true)
+		if (harvestedOre < HARVESTER_CAPACITY && sharedAstar.findWayToTileType(tileX, tileY, 25,26, path) == true)
 		{
 			state = STATE_ON_WAY_TO_ORE;
 			//uart_printf("state=STATE_ON_WAY_TO_ORE;\n");
 		}
-		else if (harvestedOre >= 4 && astar.findWayToTileType(posX / 16, posY / 16, 27, path) == true)
+		else if (harvestedOre >= HARVESTER_CAPACITY && sharedAstar.findWayToTileType(tileX, tileY, 27,27, path) == true)
 		{
 			state = STATE_ON_WAY_TO_RAFFINERY;
 			//uart_printf("state=STATE_ON_WAY_TO_RAFFINERY;\n");
@@ -72,21 +81,40 @@ void Harvester::simulate(AStar &astar)
 
 		break;
 	case STATE_ON_WAY_TO_ORE:
-		if (!moving && mapData[posX / 16 + posY / 16 * LEVELMAP_WIDTH] == 25)
+	{
+
+		uint8_t standingOnTileId = mapData[tileX + tileY * LEVELMAP_WIDTH];
+		if (!moving && standingOnTileId >= 25 && standingOnTileId <= 26 )
 		{
 			//Ja, wir stehen und ja, wir sind auf Erz.
-			harvestedOre++;
+			if (standingOnTileId == 26)
+				harvestedOre+=1;
+			else
+				harvestedOre+=2;
+
+
 			alterTile(posX/16,posY/16,1);
-			//mapData[posX / 16 + posY / 16 * LEVELMAP_WIDTH] = 1;
+			//mapData[tileX + tileY * LEVELMAP_WIDTH] = 1;
+			state = STATE_HARVEST_IDLE;
+		}
+		else if (!moving)
+		{
+			//Wir bewegen uns also nicht mehr und es ist kein Erz da???? Dann suchen wir weiter!
 			state = STATE_HARVEST_IDLE;
 		}
 
 		break;
+	}
 	case STATE_ON_WAY_TO_RAFFINERY:
-		if (!moving && mapData[posX / 16 + posY / 16 * LEVELMAP_WIDTH] == 27)
+		if (!moving && mapData[tileX + tileY * LEVELMAP_WIDTH] == 27)
 		{
 			state = STATE_HARVEST_IDLE;
 			harvestedOre = 0;
+		}
+		else if (!moving)
+		{
+			//Wir bewegen uns also nicht mehr und es ist keine Raffinerie da???? Dann suchen wir weiter!
+			state = STATE_HARVEST_IDLE;
 		}
 
 		break;
@@ -102,3 +130,24 @@ void Harvester::blit()
 	blitMaskedBob_mapCoordinate(animationTable[animCnt / 8], posX, posY - 14, 16, 24);
 }
 
+//Harvester benötigt Custom WalkTo, wegen Harvesting Funktion
+bool Harvester::walkTo(int16_t endX, int16_t endY)
+{
+	state = STATE_IDLE;
+
+	if (sharedAstar.findWay(tileX,tileY,endX,endY,path))
+	{
+		targetX = endX;
+		targetY = endY;
+
+		uint8_t targetTileId = mapData[targetX + targetY * LEVELMAP_WIDTH];
+		if (targetTileId >= 25 && targetTileId <= 26 )
+		{
+			state = STATE_HARVEST_IDLE;
+		}
+
+		return true;
+	}
+
+	return false;
+}

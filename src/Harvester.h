@@ -13,12 +13,14 @@
 class Harvester: public Game::Unit
 {
 public:
-	void simulate(AStar &astar);
-	void harvest(AStar &astar);
-	void blit();
-	void init();
+	void harvest();
 
-	Harvester();
+	virtual void simulate();
+	virtual void blit();
+	virtual bool specialAction();
+	virtual bool walkTo(int16_t endX, int16_t endY);
+
+	Harvester(int16_t tileX, int16_t tileY);
 	virtual ~Harvester();
 private:
 	enum

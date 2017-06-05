@@ -59,6 +59,44 @@ int getIndexOfColor(GifColorType col)
 	return 0;
 }
 
+void readGimpPaletteFile(char *path)
+{
+	FILE *f=fopen(path,"r");
+	char buf[200];
+	assert(f!=NULL);
+
+	for (;;)
+	{
+		if (fgets(buf,200,f)==NULL)
+			return;
+
+		if (buf[0]!='\n')
+		{
+			assert(buf[0] == '#');
+
+			int red,green,blue;
+			//char comment[200];
+
+			int val = strtol(&buf[1], NULL, 16);
+
+			red = (val>>20)&0xf;
+			green = (val>>12)&0xf;
+			blue = (val>>4)&0xf;
+
+			//assert (sscanf(buf,"%d %d %d %s",&red,&green,&blue, &comment)!=EOF);
+			//printf("%d %d %d %d\n",paletteEntrys,red,green,blue);
+			//printf ("%s",readPtr);
+			//assert(paletteEntrys<=MAX_PALETTE_SIZE);
+
+			printf ("%d %d %d\n",red,green,blue);
+
+
+		}
+	}
+	fclose(f);
+
+}
+
 void readPaletteFile (char *path)
 {
 	FILE *f=fopen(path,"r");
@@ -531,7 +569,6 @@ void gifToMaskedAcbm(char *giffile, char *outfile, int bitplanes)
 			}
 
 			//Nun die Maske
-			int chunkyMask = 1 << i;
 			*maskPlanePtr=0; //Erst mal auf 0 setzen.
 
 			int wordMask= 1<<(8-1);
@@ -604,7 +641,7 @@ void amigaPalette()
 	}
 }
 
-void gimpPalette()
+void printGimpPalette()
 {
 	int i;
 	printf("GIMP Palette\n");
@@ -649,22 +686,27 @@ int main(int argc,char **argv)
 		gifToMaskedAcbm(argv[2],argv[5],atoi(argv[4]));
 	}
 
-	else if (!strcmp(argv[1],"gifToPalette"))
+	else if (!strcmp(argv[1],"gif2Palette"))
 	{
 		assert(argc==3);
 		gifToPalette(argv[2]);
 	}
-	else if (!strcmp(argv[1],"amigaPalette"))
+	else if (!strcmp(argv[1],"palette2AmigaRegisterSettings"))
 	{
 		assert(argc==3);
 		readPaletteFile(argv[2]);
 		amigaPalette();
 	}
-	else if (!strcmp(argv[1],"gimpPalette"))
+	else if (!strcmp(argv[1],"palette2GimpPalette"))
 	{
 		assert(argc==3);
 		readPaletteFile(argv[2]);
-		gimpPalette();
+		printGimpPalette();
+	}
+	else if (!strcmp(argv[1],"gimpPalette2Palette"))
+	{
+		assert(argc==3);
+		readGimpPaletteFile(argv[2]);
 	}
 	else
 	{

@@ -31,6 +31,15 @@
 #include "assets.h"
 
 
+//#define DEBUG_VERTICAL_SCROLL	0
+//#define DEBUG_HORIZONTAL_SCROLL	0
+//#define DEBUG_PRINT
+#define DEBUG_SCROLL_RUNTIME
+#define DEBUG_BOB_RUNTIME
+//#define DEBUG_COPPER_WRAP
+
+
+
 extern volatile struct Custom custom;
 
 
@@ -127,13 +136,6 @@ const uint16_t displayWindowHStart=128; //eigentlich 129.... aber Amiga Bugs in 
 
 uint8_t mapData[LEVELMAP_WIDTH*LEVELMAP_HEIGHT];
 uint8_t *topLeftMapTile;
-
-//#define DEBUG_VERTICAL_SCROLL	0
-//#define DEBUG_HORIZONTAL_SCROLL	0
-//#define DEBUG_PRINT
-//#define DEBUG_SCROLL_RUNTIME
-#define DEBUG_BOB_RUNTIME
-//#define DEBUG_COPPER_WRAP
 
 #ifdef DEBUG_VERTICAL_SCROLL
 int debugVerticalScrollAmount	= DEBUG_VERTICAL_SCROLL;
@@ -236,7 +238,7 @@ void constructCopperList()
 
 
 	}
-	COPPER_WAIT_VERTICAL(displayWindowVStop+1)
+	COPPER_WAIT_VERTICAL((uint8_t)(displayWindowVStop+1))
 
 #ifdef DEBUG_COPPER_WRAP
 	copperlist[i++]=COLOR00; //Löse Interrupt aus
@@ -261,14 +263,16 @@ void constructCopperList()
 
 void initVideo()
 {
+	uart_printf("AllocMem bitmap %d\n",FRAMEBUFFER_SIZE);
 
-	bitmap=AllocMem(FRAMEBUFFER_SIZE, MEMF_CHIP | MEMF_CLEAR);
+	bitmap=AllocMem(FRAMEBUFFER_SIZE, MEMF_CHIP );
 	assert(bitmap);
 	copperlist=AllocMem(300, MEMF_CHIP);
 	assert(copperlist);
 	spriteNullStruct=AllocMem(32, MEMF_CHIP);
 	assert(spriteNullStruct);
-	backgroundRescueBuffer = AllocMem(BACKGROUND_RESCUE_BUFFER_SIZE*2, MEMF_CHIP | MEMF_CLEAR);
+	uart_printf("AllocMem backgroundRescueBuffer %d\n",BACKGROUND_RESCUE_BUFFER_SIZE*2);
+	backgroundRescueBuffer = AllocMem(BACKGROUND_RESCUE_BUFFER_SIZE*2, MEMF_CHIP);
 	assert(backgroundRescueBuffer);
 	backgroundRescueBufferWritePtr = backgroundRescueBuffer;
 
@@ -358,7 +362,7 @@ void checkPtrBoundary(uint16_t *dest)
 	}
 }
 
-void blitMaskedBob_mapCoordinate(uint16_t* src, int x, int y, int width, int height)
+void blitMaskedBob_mapCoordinate(const uint16_t* src, int x, int y, int width, int height)
 {
 
 	if (x < scrollX-32)
@@ -382,7 +386,7 @@ void blitMaskedBob_mapCoordinate(uint16_t* src, int x, int y, int width, int hei
 	blitMaskedACBMBob(dest, shift, src, width, height);
 }
 
-void blitMaskedBob_screenCoordinate(uint16_t* src, int x, int y, int width, int height)
+void blitMaskedBob_screenCoordinate(const uint16_t* src, int x, int y, int width, int height)
 {
 	//FIXME Falsche Formel
 	uint16_t *dest = topLeft.dest + x/16 + y*FRAMEBUFFER_LINE_PITCH/2 + 1 + 16*FRAMEBUFFER_LINE_PITCH/2;
@@ -396,7 +400,7 @@ void restoreBackground()
 {
 
 #ifdef DEBUG_BOB_RUNTIME
-	custom.color[0] = 0x0F00;
+	custom.color[0] = 0x0300;
 #endif
 #if 1
 	uint16_t* backgroundRescueBufferReadPtr = backgroundRescueBufferWritePtr;
@@ -443,7 +447,7 @@ void restoreBackground()
  * Der Copper-Wrap wird berücksichtigt.
  * Kein Clipping!
  */
-void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int height)
+void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width, int height)
 {
 	int i=0;
 
@@ -452,7 +456,7 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int 
 		dest -= FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
 
 #ifdef DEBUG_BOB_RUNTIME
-	custom.color[0] = 0x00FF;
+	custom.color[0] = 0x0033;
 #endif
 
 	uint16_t lastWordMask = 0xffff;
@@ -507,8 +511,8 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int 
 		uint16_t firstHalf_blitsize = (firstHeight*SCREEN_DEPTH << HSIZEBITS) | destWidth;
 		uint16_t secondHalf_blitsize = (secondHeight*SCREEN_DEPTH << HSIZEBITS) | destWidth;
 
-		uint16_t *firstHalf_bltapt = src + height*srcWidth*SCREEN_DEPTH; //Maske erste Hälfte
-		uint16_t *secondHalf_bltapt = firstHalf_bltapt + firstHeight * srcWidth; //Maske 2. Hälfte
+		const uint16_t *firstHalf_bltapt = src + height*srcWidth*SCREEN_DEPTH; //Maske erste Hälfte
+		const uint16_t *secondHalf_bltapt = firstHalf_bltapt + firstHeight * srcWidth; //Maske 2. Hälfte
 
 		uint16_t *firstHalf_bltcpt = dest;
 		uint16_t *secondHalf_bltcpt = firstHalf_bltcpt + firstHeight*(FRAMEBUFFER_LINE_PITCH/2) - FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
@@ -589,7 +593,7 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int 
 		custom.bltafwm = firstWordMask;
 		custom.bltalwm = lastWordMask;
 
-		custom.bltbpt = src; //Einmal setzen reicht! Danach führt der Blitter selbst nach!
+		custom.bltbpt = (void*)src; //Einmal setzen reicht! Danach führt der Blitter selbst nach!
 
 #if 1
 		for (i=0;i<SCREEN_DEPTH;i++)
@@ -597,7 +601,7 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int 
 			//Erst die obere Hälfte
 			while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter
 
-			custom.bltapt = firstHalf_bltapt;
+			custom.bltapt = (void*)firstHalf_bltapt;
 			custom.bltcpt = firstHalf_bltcpt;
 			custom.bltdpt = firstHalf_bltcpt;
 			custom.bltsize = firstHalf_blitsize; //starts blitter.
@@ -610,7 +614,7 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int 
 
 			while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter
 
-			custom.bltapt = secondHalf_bltapt;
+			custom.bltapt = (void*)secondHalf_bltapt;
 			custom.bltcpt = secondHalf_bltcpt;
 			custom.bltdpt = secondHalf_bltcpt;
 			custom.bltsize = secondHalf_blitsize; //starts blitter.
@@ -671,8 +675,8 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int 
 		custom.bltafwm = firstWordMask;
 		custom.bltalwm = lastWordMask;
 
-		uint16_t *maskPtr = src + height*srcWidth*SCREEN_DEPTH;
-		custom.bltbpt = src; //Einmal setzen reicht! Danach führt der Blitter selbst nach!
+		const uint16_t *maskPtr = src + height*srcWidth*SCREEN_DEPTH;
+		custom.bltbpt = (void*)src; //Einmal setzen reicht! Danach führt der Blitter selbst nach!
 
 		uint16_t *framebufferPtr = dest;
 		blitsize = (height << HSIZEBITS) | destWidth;
@@ -681,7 +685,7 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, uint16_t* src, int width, int 
 		{
 			while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter
 
-			custom.bltapt = maskPtr; //Muss jedes Mal neu gesetzt werden, weil der Blitter selbst nachführt.
+			custom.bltapt = (void*)maskPtr; //Muss jedes Mal neu gesetzt werden, weil der Blitter selbst nachführt.
 			custom.bltcpt = framebufferPtr;
 			custom.bltdpt = framebufferPtr;
 			custom.bltsize = blitsize; //starts blitter.
@@ -834,7 +838,7 @@ void scrollUp()
 		return;
 
 #ifdef DEBUG_SCROLL_RUNTIME
-	custom.color[0] = 0x0FFF;
+	custom.color[0] = 0x00F0;
 #endif
 	scrollY--;
 
@@ -913,7 +917,7 @@ void scrollDown()
 #endif
 
 #ifdef DEBUG_SCROLL_RUNTIME
-	custom.color[0] = 0x0FFF;
+	custom.color[0] = 0x00F0;
 #endif
 
 	scrollY++;
@@ -998,7 +1002,7 @@ void scrollLeft()
 		return;
 
 #ifdef DEBUG_SCROLL_RUNTIME
-	custom.color[0] = 0x0FFF;
+	custom.color[0] = 0x00F0;
 #endif
 
 	scrollX--;
@@ -1098,7 +1102,7 @@ void scrollRight()
 		return;
 
 #ifdef DEBUG_SCROLL_RUNTIME
-	custom.color[0] = 0x0FFF;
+	custom.color[0] = 0x00F0;
 #endif
 
 	scrollX++;

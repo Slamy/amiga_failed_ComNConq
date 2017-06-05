@@ -13,7 +13,7 @@ void uart_printf ( const char * format, ... );
 void uart_printChar(char c);
 void uart_puts(char *str);
 
-#define ASSERT(cond) \
+#define uart_assert(cond) \
 	if (!(cond)) \
 	{ \
 		uart_printf("ASSERT failed at %s:%d %s\n",__FILE__,__LINE__,__func__); \

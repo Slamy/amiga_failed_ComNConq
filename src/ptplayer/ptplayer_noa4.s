@@ -153,8 +153,9 @@ mt_install_cia:
 	move.b	#$11,CIACRA(a0)		; load timer, start continuous
 
 	; load TimerB with 496 ticks for setting DMA and repeat
-	move.b	#496&255,CIATBLO(a0)
-	move.b	#496>>8,CIATBHI(a0)
+	; Slamy: 496 isn't enough for Amiga 1200. broken samples on aliens on earth song. 1000 is better.
+	move.b	#1000&255,CIATBLO(a0)
+	move.b	#1000>>8,CIATBHI(a0)
 
 	; TimerA and TimerB interrupt enable
 	move.b	#$83,CIAICR(a0)

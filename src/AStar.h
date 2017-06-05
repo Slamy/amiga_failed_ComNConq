@@ -52,8 +52,8 @@ public:
 	virtual ~AStar();
 
 	static void init();
-	bool findWay(int startX, int startY, int endX, int endY, AStarPath &path);
-	bool findWayToTileType(int startX, int startY, char tileId, AStarPath &path);
+	bool findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, AStarPath &path);
+	bool findWayToTileType(int16_t startX, int16_t startY, char targetTileIdMin, char targetTileIdMax, AStarPath &path);
 	void visualize();
 
 private:
