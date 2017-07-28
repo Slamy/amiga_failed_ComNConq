@@ -78,7 +78,6 @@ const unsigned char sineTable[]={
 */
 
 AStar Unit::sharedAstar;
-Unit* Unit::presenceMap[LEVELMAP_HEIGHT * LEVELMAP_WIDTH];
 
 Unit::Unit()
 {
@@ -88,22 +87,25 @@ Unit::Unit()
 	posY=0;
 	tileX=0;
 	tileY=0;
-	alive=false;
+	id=DEAD_ID;
 	wayPointX=0;
 	wayPointY=0;
 	moving=false;
 	targetX=0;
 	targetY=0;
 	facingDirection=N;
+	path = NULL;
 }
 
 Unit::~Unit()
 {
-	alive=false;
+	id=DEAD_ID;
 	moving=false;
 }
 
 //uint8_t sineIndex=0;
+
+#define WALKING_SPEED 4
 
 void Unit::simulate()
 {
@@ -117,35 +119,35 @@ void Unit::simulate()
 
 		if (posX < wayPointX)
 		{
-			posX+=1;
+			posX+=WALKING_SPEED;
 			moving=true;
 		}
 		else if (posX > wayPointX)
 		{
-			posX-=1;
+			posX-=WALKING_SPEED;
 			moving=true;
 		}
 
 		if (posY < wayPointY)
 		{
-			posY+=1;
+			posY+=WALKING_SPEED;
 			moving=true;
 		}
 		else if (posY > wayPointY)
 		{
-			posY-=1;
+			posY-=WALKING_SPEED;
 			moving=true;
 		}
 
 	}
 
-	if (!moving && path.waypointsAnz)
+	if (!moving && path)
 	{
-		uint16_t newTileX = path.waypoints[path.waypointsAnz-1].posX;
-		uint16_t newTileY = path.waypoints[path.waypointsAnz-1].posY;
+		uint16_t newTileX = path->waypoints[path->waypointsAnz-1].posX;
+		uint16_t newTileY = path->waypoints[path->waypointsAnz-1].posY;
 
 		//Können wir uns überhaupt auf das neue Tile bewegen?
-		if (presenceMap[newTileX + newTileY * LEVELMAP_WIDTH] == NULL || presenceMap[newTileX + newTileY * LEVELMAP_WIDTH] == this)
+		if (Game::unitpool.presenceMap[newTileX + newTileY * LEVELMAP_WIDTH] == DEAD_ID || Game::unitpool.presenceMap[newTileX + newTileY * LEVELMAP_WIDTH] == id)
 		{
 			moving=true;
 
@@ -177,24 +179,28 @@ void Unit::simulate()
 			}
 
 			//Da wo ich vorher war, bin ich nicht mehr.
-			presenceMap[tileX + tileY * LEVELMAP_WIDTH] = NULL;
+			Game::unitpool.presenceMap[tileX + tileY * LEVELMAP_WIDTH] = DEAD_ID;
 
 			//Belege den nun nächsten Tile als meine Position, obwohl ich noch nicht da bin.
 			tileX = newTileX;
 			tileY = newTileY;
-			presenceMap[tileX + tileY * LEVELMAP_WIDTH] = this;
+			Game::unitpool.presenceMap[tileX + tileY * LEVELMAP_WIDTH] = id;
 
 
 			wayPointX = tileX * 16;
 			wayPointY = tileY * 16;
 
-			path.waypointsAnz--;
+			path->waypointsAnz--;
+			if (!path->waypointsAnz)
+				path = NULL;
 		}
 		else
 		{
-			path.waypointsAnz = 0;
+			path->waypointsAnz = 0;
+			path=NULL;
+
 			uart_printf("Plötzlich was im Weg... versuche neue Route\n");
-			if (sharedAstar.findWay(tileX,tileY,targetX,targetY,path))
+			if (sharedAstar.findWay(tileX,tileY,targetX,targetY,&path))
 			{
 				uart_printf("Glück gehabt.\n");
 			}
@@ -208,7 +214,7 @@ void Unit::simulate()
 
 bool Unit::walkTo(int16_t endX, int16_t endY)
 {
-	if (sharedAstar.findWay(tileX,tileY,endX,endY,path))
+	if (sharedAstar.findWay(tileX,tileY,endX,endY,&path))
 	{
 		targetX = endX;
 		targetY = endY;
@@ -219,10 +225,14 @@ bool Unit::walkTo(int16_t endX, int16_t endY)
 }
 
 
-Unit* Unit::unitAt(int16_t tileX, int16_t tileY)
+Unit* UnitPool::unitAt(int16_t tileX, int16_t tileY)
 {
+	int id = presenceMap[tileX + tileY* LEVELMAP_WIDTH];
 
-	return presenceMap[tileX + tileY* LEVELMAP_WIDTH];
+	if (id==DEAD_ID)
+		return NULL;
+
+	return &units[id];
 }
 
 
@@ -235,5 +245,6 @@ void *operator new (size_t size, Game::UnitPool& pool)
 	uart_assert(size <= sizeof(Game::PaddedUnit));
     return pool.allocate();
 }
+
 
 

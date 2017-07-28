@@ -30,7 +30,7 @@ int readAssets()
 	assets=AllocMem(sizeof(struct assets), MEMF_CHIP);
 	if (assets==NULL)
 	{
-		printf("Couldn't allocate memory for assets...\n");
+		printf("Couldn't allocate %d bytes chip mem for assets...\n",sizeof(struct assets));
 		return 1;
 	}
 

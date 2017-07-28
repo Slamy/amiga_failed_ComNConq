@@ -29,7 +29,7 @@ static const int16_t graphicHeight[]=
 
 Tank::Tank(int16_t tileX, int16_t tileY)
 {
-	alive=true;
+	id = Game::unitpool.lastAllocatedUnitId;
 	this->tileX = tileX;
 	this->tileY = tileY;
 
@@ -47,7 +47,7 @@ Tank::Tank(int16_t tileX, int16_t tileY)
 
 	uart_printf("Tank Constructor %d %d\n",tileX,tileY);
 
-	presenceMap[tileX + tileY * LEVELMAP_WIDTH] = this;
+	Game::unitpool.presenceMap[tileX + tileY * LEVELMAP_WIDTH] = id;
 
 }
 
@@ -64,7 +64,7 @@ void Tank::simulate()
 
 void Tank::blit()
 {
-	//uart_printf("%d %p %p\n",facingDirection,graphicBOB[facingDirection],assets->tank0_0);
+	uart_printf("Tank blit %d %p %p\n",facingDirection,graphicBOB[facingDirection],assets->tank0_0);
 	blitMaskedBob_mapCoordinate(graphicBOB[facingDirection], posX, posY + 16/2 - graphicHeight[facingDirection]/2, 16, graphicHeight[facingDirection]);
 	//blitMaskedBob_mapCoordinate(assets->tank0_0, posX, posY - graphicHeight[facingDirection]/2, 16, graphicHeight[facingDirection]);
 

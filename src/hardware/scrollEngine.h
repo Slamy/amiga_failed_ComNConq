@@ -58,6 +58,8 @@ void restoreBackground();
 void alterTile(uint16_t x, uint16_t y, uint8_t tileid);
 void blitAlteredTiles();
 
+void blitTile(uint8_t tileid, uint16_t *dest, int8_t x, int8_t y);
+
 void waitVBlank();
 char vBlankReached();
 

@@ -20,7 +20,7 @@ Harvester::Harvester(int16_t tileX, int16_t tileY)
 
 	harvestedOre = 0;
 	state = STATE_IDLE;
-	alive=true;
+	id = Game::unitpool.lastAllocatedUnitId;
 	this->tileX = tileX;
 	this->tileY = tileY;
 
@@ -34,7 +34,7 @@ Harvester::Harvester(int16_t tileX, int16_t tileY)
 
 	uart_printf("Harvester Constructor %d %d\n",tileX,tileY);
 
-	presenceMap[tileX + tileY * LEVELMAP_WIDTH] = this;
+	Game::unitpool.presenceMap[tileX + tileY * LEVELMAP_WIDTH] = id;
 }
 
 Harvester::~Harvester()
@@ -64,12 +64,12 @@ void Harvester::simulate()
 	switch (state)
 	{
 	case STATE_HARVEST_IDLE:
-		if (harvestedOre < HARVESTER_CAPACITY && sharedAstar.findWayToTileType(tileX, tileY, 25,26, path) == true)
+		if (harvestedOre < HARVESTER_CAPACITY && sharedAstar.findWayToTileType(tileX, tileY, 25,26, &path) == true)
 		{
 			state = STATE_ON_WAY_TO_ORE;
 			//uart_printf("state=STATE_ON_WAY_TO_ORE;\n");
 		}
-		else if (harvestedOre >= HARVESTER_CAPACITY && sharedAstar.findWayToTileType(tileX, tileY, 27,27, path) == true)
+		else if (harvestedOre >= HARVESTER_CAPACITY && sharedAstar.findWayToTileType(tileX, tileY, 27,27, &path) == true)
 		{
 			state = STATE_ON_WAY_TO_RAFFINERY;
 			//uart_printf("state=STATE_ON_WAY_TO_RAFFINERY;\n");
@@ -135,7 +135,7 @@ bool Harvester::walkTo(int16_t endX, int16_t endY)
 {
 	state = STATE_IDLE;
 
-	if (sharedAstar.findWay(tileX,tileY,endX,endY,path))
+	if (sharedAstar.findWay(tileX,tileY,endX,endY,&path))
 	{
 		targetX = endX;
 		targetY = endY;
@@ -143,7 +143,7 @@ bool Harvester::walkTo(int16_t endX, int16_t endY)
 		uint8_t targetTileId = mapData[targetX + targetY * LEVELMAP_WIDTH];
 		if (targetTileId >= 25 && targetTileId <= 26 )
 		{
-			state = STATE_HARVEST_IDLE;
+			state = STATE_ON_WAY_TO_ORE;
 		}
 
 		return true;

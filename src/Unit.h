@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "AStar.h"
 extern "C"
@@ -18,6 +19,8 @@ extern "C"
 }
 namespace Game
 {
+
+#define DEAD_ID 0xFF
 
 class Unit
 {
@@ -30,9 +33,8 @@ public:
 
 	virtual bool walkTo(int16_t endX, int16_t endY);
 	virtual bool specialAction(){return false;};
-	bool alive;
 
-	static Unit* unitAt(int16_t tileX, int16_t tileY);
+	unsigned char id;
 
 protected:
 
@@ -41,14 +43,15 @@ protected:
 	uint8_t animCnt;
 
 	uint16_t* animationTable[10];
-	AStarPath path;
+	AStarPath *path;
 	uint16_t wayPointX, wayPointY;
 	bool moving;
 
 	uint16_t targetX, targetY;
 
+
 	static AStar sharedAstar;
-	static Unit* presenceMap[LEVELMAP_HEIGHT * LEVELMAP_WIDTH];
+
 
 	enum
 	{
@@ -57,7 +60,7 @@ protected:
 	} facingDirection;
 };
 
-
+#define UNIT_POOL_SIZE 40
 class PaddedUnit : public Unit
 {
 public:
@@ -73,15 +76,29 @@ public:
 class UnitPool
 {
 public:
+
 	Game::PaddedUnit units[UNIT_POOL_SIZE];
+	Unit* unitAt(int16_t tileX, int16_t tileY);
+	int lastAllocatedUnitId;
+	uint8_t presenceMap[LEVELMAP_HEIGHT * LEVELMAP_WIDTH];
+	
+	UnitPool()
+	{
+		memset(presenceMap,DEAD_ID,sizeof(presenceMap));
+		lastAllocatedUnitId=0;
+
+	}
 
 	void* allocate()
 	{
-		for(auto &unit : units)
+		//for(auto &unit : units)
+		int i;
+		for (i=0; i < UNIT_POOL_SIZE; i++)
 		{
-			if (unit.alive == false)
+			if (units[i].id == DEAD_ID)
 			{
-				return &unit;
+				lastAllocatedUnitId=i;
+				return &units[i];
 			}
 		}
 		return NULL;
@@ -91,7 +108,8 @@ public:
 	{
 		for(auto &unit : units)
 		{
-			unit.simulate();
+			if (unit.id != DEAD_ID)
+				unit.simulate();
 		}
 	}
 
@@ -99,15 +117,18 @@ public:
 	{
 		for(auto &unit : units)
 		{
-			unit.blit();
+			if (unit.id != DEAD_ID)
+				unit.blit();
 		}
 	}
 
 };
 
 
+extern UnitPool unitpool;
 
 }
+
 
 void *operator new (size_t size, Game::UnitPool& pool);
 

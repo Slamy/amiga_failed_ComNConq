@@ -21,8 +21,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <assert.h>
-
 #include "asmstuff.h"
 #include "copper.h"
 #include "uart.h"
@@ -36,8 +34,8 @@
 //#define DEBUG_PRINT
 #define DEBUG_SCROLL_RUNTIME
 #define DEBUG_BOB_RUNTIME
-//#define DEBUG_COPPER_WRAP
-
+#define DEBUG_COPPER_WRAP
+//#define DEBUG_DISABLE_BLIT
 
 
 extern volatile struct Custom custom;
@@ -58,7 +56,10 @@ struct CornerTile
 {
 	uint16_t *dest;
 	uint8_t *tile;
+	int8_t x;
+	int8_t y;
 };
+
 
 /*
  * Das Movingtile startet bei einem CornerTile und bewegt sich beim Scrolling in eine Richtung.
@@ -76,6 +77,9 @@ struct MovingTile
 
 	char isRight_isDown;
 	char isActive;
+
+	int8_t x;
+	int8_t y;
 };
 
 struct MovingTile horizontalScrollBlitTile;
@@ -94,7 +98,7 @@ int scrollX=0;
 uint16_t *firstFetchWord;
 uint16_t *lastFetchWord;
 
-#define BACKGROUND_RESCUE_BUFFER_SIZE 32000
+#define BACKGROUND_RESCUE_BUFFER_SIZE 5000
 
 
 uint16_t* backgroundRescueBuffer;
@@ -106,20 +110,24 @@ uint16_t* backgroundRescueBufferWritePtr;
 	if (arg.dest >= lastFetchWord) \
 		arg.dest -= FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT; \
 	arg.tile+=LEVELMAP_WIDTH; \
+	arg.y++; \
 
 #define WRAPPED_TILE_MOVEPTR_UP(arg) \
 	arg.dest -= FRAMEBUFFER_LINE_PITCH/2*16; \
 	if (arg.dest < firstFetchWord) \
 		arg.dest += FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT; \
 	arg.tile -= LEVELMAP_WIDTH; \
+	arg.y--; \
 
 #define TILE_MOVEPTR_RIGHT(arg) \
 	arg.dest++; \
 	arg.tile++; \
+	arg.x++; \
 
 #define TILE_MOVEPTR_LEFT(arg) \
 	arg.dest--; \
 	arg.tile--; \
+	arg.x--; \
 
 volatile uint16_t *bitmap=NULL;
 //uint16_t __attribute__((section(".data_chip"))) bitmap[FRAMEBUFFER_SIZE/2];
@@ -135,7 +143,7 @@ const uint16_t displayWindowVStop=300;
 const uint16_t displayWindowHStart=128; //eigentlich 129.... aber Amiga Bugs in Hardware...?
 
 uint8_t mapData[LEVELMAP_WIDTH*LEVELMAP_HEIGHT];
-uint8_t *topLeftMapTile;
+
 
 #ifdef DEBUG_VERTICAL_SCROLL
 int debugVerticalScrollAmount	= DEBUG_VERTICAL_SCROLL;
@@ -241,7 +249,7 @@ void constructCopperList()
 	COPPER_WAIT_VERTICAL((uint8_t)(displayWindowVStop+1))
 
 #ifdef DEBUG_COPPER_WRAP
-	copperlist[i++]=COLOR00; //Löse Interrupt aus
+	copperlist[i++]=COLOR00;
 	copperlist[i++]=0;
 #endif
 
@@ -263,17 +271,18 @@ void constructCopperList()
 
 void initVideo()
 {
+	uart_printf("Available Chip Mem %d \n",AvailMem(MEMF_CHIP));
 	uart_printf("AllocMem bitmap %d\n",FRAMEBUFFER_SIZE);
 
 	bitmap=AllocMem(FRAMEBUFFER_SIZE, MEMF_CHIP );
-	assert(bitmap);
+	uart_assert(bitmap);
 	copperlist=AllocMem(300, MEMF_CHIP);
-	assert(copperlist);
+	uart_assert(copperlist);
 	spriteNullStruct=AllocMem(32, MEMF_CHIP);
-	assert(spriteNullStruct);
+	uart_assert(spriteNullStruct);
 	uart_printf("AllocMem backgroundRescueBuffer %d\n",BACKGROUND_RESCUE_BUFFER_SIZE*2);
 	backgroundRescueBuffer = AllocMem(BACKGROUND_RESCUE_BUFFER_SIZE*2, MEMF_CHIP);
-	assert(backgroundRescueBuffer);
+	uart_assert(backgroundRescueBuffer);
 	backgroundRescueBufferWritePtr = backgroundRescueBuffer;
 
 
@@ -375,7 +384,7 @@ void blitMaskedBob_mapCoordinate(const uint16_t* src, int x, int y, int width, i
 	if (y > scrollY + SCREEN_HEIGHT)
 		return;
 
-	//uart_printf("Not clipped\n");
+	uart_printf("Not clipped\n");
 
 	uint16_t *dest = topLeft.dest +
 				x/16 - scrollX/16 +
@@ -399,13 +408,14 @@ void blitMaskedBob_screenCoordinate(const uint16_t* src, int x, int y, int width
 void restoreBackground()
 {
 
-#ifdef DEBUG_BOB_RUNTIME
-	custom.color[0] = 0x0300;
-#endif
+
 #if 1
 	uint16_t* backgroundRescueBufferReadPtr = backgroundRescueBufferWritePtr;
 	while (backgroundRescueBufferReadPtr != backgroundRescueBuffer)
 	{
+#ifdef DEBUG_BOB_RUNTIME
+		custom.color[0] = 0x0700;
+#endif
 		backgroundRescueBufferReadPtr-=4;
 
 		uint16_t* dest = *((uint16_t**)backgroundRescueBufferReadPtr);
@@ -442,6 +452,7 @@ void restoreBackground()
 #endif
 }
 
+
 /*
  * Zeichnet ACBM Bob mit angefügter Maske in den Framebuffer an diese Adresse dest.
  * Der Copper-Wrap wird berücksichtigt.
@@ -456,7 +467,7 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 		dest -= FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
 
 #ifdef DEBUG_BOB_RUNTIME
-	custom.color[0] = 0x0033;
+	custom.color[0] = 0x0077;
 #endif
 
 	uint16_t lastWordMask = 0xffff;
@@ -470,6 +481,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 
 	if (shift)
 	{
+#ifdef DEBUG_BOB_RUNTIME
+	custom.color[0] = 0x0F77;
+#endif
 		srcMod = -2;
 		destMod = (FRAMEBUFFER_WIDTH - width - 16)/8 + FRAMEBUFFER_PLANE_PITCH*(SCREEN_DEPTH-1);
 		destWidth++;
@@ -479,8 +493,6 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 	}
 
 	uint16_t* lastLineOffBlit = dest + (FRAMEBUFFER_LINE_PITCH/2) * (height-1);
-
-
 
 	/*
 	 * A ist die Maske
@@ -537,8 +549,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 		custom.bltdmod = 0;
 		custom.bltafwm = 0xffff;
 		custom.bltalwm = 0xffff;
+#ifndef DEBUG_DISABLE_BLIT
 		custom.bltsize = firstHalf_blitsize; //starts blitter.
-
+#endif
 		backgroundRescueBufferWritePtr += packageSize;
 
 		*((uint16_t**)backgroundRescueBufferWritePtr) = firstHalf_bltcpt; //Langwort für den Pointer
@@ -563,7 +576,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 		custom.bltdmod = 0;
 		custom.bltafwm = 0xffff;
 		custom.bltalwm = 0xffff;
+#ifndef DEBUG_DISABLE_BLIT
 		custom.bltsize = secondHalf_blitsize; //starts blitter.
+#endif
 
 		backgroundRescueBufferWritePtr += packageSize;
 
@@ -573,7 +588,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 		backgroundRescueBufferWritePtr+=4;
 
 
-
+#ifdef DEBUG_BOB_RUNTIME
+	custom.color[0] = 0x00FF;
+#endif
 		/* Zeichne nun beide Teile.
 		 * Da wir hier von ACBM nach ILBM blitten, machen wir das ganze SCREEN_DEPTH mal.
 		 * Erst schon mal alle Register setzen, die sich ohnehin nicht ändern.
@@ -604,8 +621,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 			custom.bltapt = (void*)firstHalf_bltapt;
 			custom.bltcpt = firstHalf_bltcpt;
 			custom.bltdpt = firstHalf_bltcpt;
+#ifndef DEBUG_DISABLE_BLIT
 			custom.bltsize = firstHalf_blitsize; //starts blitter.
-
+#endif
 			//Zielpointer
 			firstHalf_bltcpt += (FRAMEBUFFER_PLANE_PITCH/2);
 
@@ -617,8 +635,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 			custom.bltapt = (void*)secondHalf_bltapt;
 			custom.bltcpt = secondHalf_bltcpt;
 			custom.bltdpt = secondHalf_bltcpt;
+#ifndef DEBUG_DISABLE_BLIT
 			custom.bltsize = secondHalf_blitsize; //starts blitter.
-
+#endif
 			//Zielpointer
 			secondHalf_bltcpt += (FRAMEBUFFER_PLANE_PITCH/2);
 #endif
@@ -651,7 +670,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 		custom.bltdmod = 0;
 		custom.bltafwm = 0xffff;
 		custom.bltalwm = 0xffff;
+#ifndef DEBUG_DISABLE_BLIT
 		custom.bltsize = blitsize; //starts blitter.
+#endif
 
 		backgroundRescueBufferWritePtr += packageSize;
 
@@ -660,7 +681,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 		backgroundRescueBufferWritePtr[3] = destWidth;
 		backgroundRescueBufferWritePtr+=4;
 
-
+#ifdef DEBUG_BOB_RUNTIME
+	custom.color[0] = 0x00FF;
+#endif
 		/* Zeichne ganz normal als ganzes Stück.
 		 * Da wir hier von ACBM nach ILBM blitten, machen wir das ganze SCREEN_DEPTH mal.
 		 * Erst schon mal alle Register setzen, die sich ohnehin nicht ändern.
@@ -688,8 +711,9 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 			custom.bltapt = (void*)maskPtr; //Muss jedes Mal neu gesetzt werden, weil der Blitter selbst nachführt.
 			custom.bltcpt = framebufferPtr;
 			custom.bltdpt = framebufferPtr;
+#ifndef DEBUG_DISABLE_BLIT
 			custom.bltsize = blitsize; //starts blitter.
-
+#endif
 			framebufferPtr += (FRAMEBUFFER_PLANE_PITCH/2);
 		}
 	}
@@ -697,55 +721,20 @@ void blitMaskedACBMBob(uint16_t *dest, int shift, const uint16_t* src, int width
 #ifdef DEBUG_BOB_RUNTIME
 	custom.color[0] = 0x0;
 #endif
+
+	uart_printf("finished blit\n");
+
 }
 
-static void blitTile(uint8_t tileid, uint16_t *dest)
-{
-	uint16_t *src = assets->tilemap + SCREEN_DEPTH * 16 * tileid;
-	//uart_printf("b %p %p\n",dest, src);
-#if 1
-	while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter
 
-	custom.bltcon0 = BC0F_SRCA | A_TO_D | BC0F_DEST;
-	custom.bltapt = src;
-	custom.bltdpt = dest;
-	custom.bltamod = 0;
-	custom.bltdmod = (FRAMEBUFFER_WIDTH - 16)/8;
-	custom.bltafwm = 0xffff;
-	custom.bltalwm = 0xffff;
-	custom.bltsize = ((5*16) << HSIZEBITS) | 1; //starts blitter. 16 x 16 Pixel
-
-#else
-	int i;
-
-	if (dest < bitmap)
-		return;
-
-	for (i=0; i<5*16; i++)
-	{
-		if (dest < bitmap)
-		{
-			uart_printf("Illegale Speicheroperation dest < bitmap\n");
-			for(;;);
-		}
-		if (dest >= &bitmap[FRAMEBUFFER_SIZE/2])
-		{
-			uart_printf("Illegale Speicheroperation dest >= &bitmap[FRAMEBUFFER_SIZE/2]\n");
-			for(;;);
-		}
-
-		*dest = *src;
-		src++;
-		dest+=FRAMEBUFFER_WIDTH/16;
-	}
-#endif
-}
 
 
 struct
 {
 	uint16_t *dest;
 	uint8_t tileid;
+	int8_t x;
+	int8_t y;
 } alteredTileBlits[10];
 uint16_t alteredTileBlitsAnz=0;
 
@@ -768,6 +757,8 @@ void alterTile(uint16_t x, uint16_t y, uint8_t tileid)
 
 		alteredTileBlits[alteredTileBlitsAnz].dest = dest;
 		alteredTileBlits[alteredTileBlitsAnz].tileid = tileid;
+		alteredTileBlits[alteredTileBlitsAnz].x = x;
+		alteredTileBlits[alteredTileBlitsAnz].y = y;
 		alteredTileBlitsAnz++;
 		//blitTile(tileid, dest);
 	}
@@ -778,7 +769,11 @@ void blitAlteredTiles()
 	uint16_t i;
 	for (i=0; i< alteredTileBlitsAnz;i++)
 	{
-		blitTile(alteredTileBlits[i].tileid, alteredTileBlits[i].dest);
+		blitTile(alteredTileBlits[i].tileid,
+				alteredTileBlits[i].dest,
+				alteredTileBlits[i].x,
+				alteredTileBlits[i].y
+				);
 	}
 	alteredTileBlitsAnz=0;
 }
@@ -801,7 +796,7 @@ static inline int verifyTile(uint8_t tileid, volatile uint16_t *dest)
 }
 
 
-void processMovingTile(struct MovingTile *mt)
+void processHorizontalMovingTile(struct MovingTile *mt)
 {
 #ifdef DEBUG_PRINT
 	if (mt == &horizontalScrollBlitTile)
@@ -809,10 +804,11 @@ void processMovingTile(struct MovingTile *mt)
 	else if (mt == &verticalScrollBlitTile)
 		uart_printf("processMovingTile verticalMove\n");
 #endif
-	blitTile(*mt->tile, mt->dest);
+	blitTile(*mt->tile, mt->dest, mt->x, mt->y);
 
 	mt->dest += mt->destStep;
 	mt->tile += mt->tileStep;
+	mt->y++;
 
 	if (mt->dest >= lastFetchWord)
 		mt->dest -= FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
@@ -821,6 +817,29 @@ void processMovingTile(struct MovingTile *mt)
 
 	//mt->number--;
 }
+
+void processVerticalMovingTile(struct MovingTile *mt)
+{
+#ifdef DEBUG_PRINT
+	if (mt == &horizontalScrollBlitTile)
+		uart_printf("processMovingTile horizontalMove\n");
+	else if (mt == &verticalScrollBlitTile)
+		uart_printf("processMovingTile verticalMove\n");
+#endif
+	blitTile(*mt->tile, mt->dest, mt->x, mt->y);
+
+	mt->dest += mt->destStep;
+	mt->tile += mt->tileStep;
+	mt->x++;
+
+	if (mt->dest >= lastFetchWord)
+		mt->dest -= FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
+	else if (mt->dest < firstFetchWord)
+		mt->dest += FRAMEBUFFER_LINE_PITCH/2*FRAMEBUFFER_HEIGHT;
+
+	//mt->number--;
+}
+
 
 
 //Das vertikale Scrolling erstreckt sich über die gesamte Zeile.
@@ -838,7 +857,7 @@ void scrollUp()
 		return;
 
 #ifdef DEBUG_SCROLL_RUNTIME
-	custom.color[0] = 0x00F0;
+	custom.color[0] = 0x0070;
 #endif
 	scrollY--;
 
@@ -848,7 +867,6 @@ void scrollUp()
 
 	if ((scrollY & 0xf)==0xf)
 	{
-		topLeftMapTile -= LEVELMAP_WIDTH;
 
 		if (horizontalScrollBlitTile.dest == bottomLeft.dest || horizontalScrollBlitTile.dest == bottomRight.dest)
 		{
@@ -870,6 +888,8 @@ void scrollUp()
 #endif
 		verticalScrollBlitTile.dest = topLeft.dest;
 		verticalScrollBlitTile.tile = topLeft.tile;
+		verticalScrollBlitTile.x	= topLeft.x;
+		verticalScrollBlitTile.y 	= topLeft.y;
 
 		verticalScrollBlitTile.destStep = 1;
 		verticalScrollBlitTile.tileStep = 1;
@@ -899,7 +919,7 @@ void scrollUp()
 #endif
 				}
 
-				processMovingTile(&verticalScrollBlitTile);
+				processVerticalMovingTile(&verticalScrollBlitTile);
 			}
 		}
 	}
@@ -917,7 +937,7 @@ void scrollDown()
 #endif
 
 #ifdef DEBUG_SCROLL_RUNTIME
-	custom.color[0] = 0x00F0;
+	custom.color[0] = 0x0070;
 #endif
 
 	scrollY++;
@@ -932,6 +952,8 @@ void scrollDown()
 #endif
 		verticalScrollBlitTile.dest = bottomLeft.dest;
 		verticalScrollBlitTile.tile = bottomLeft.tile;
+		verticalScrollBlitTile.x	= bottomLeft.x;
+		verticalScrollBlitTile.y 	= bottomLeft.y;
 
 		verticalScrollBlitTile.destStep = 1;
 		verticalScrollBlitTile.tileStep = 1;
@@ -943,7 +965,6 @@ void scrollDown()
 
 	if ((scrollY & 0xf)==0)
 	{
-		topLeftMapTile += LEVELMAP_WIDTH;
 
 #ifdef DEBUG_PRINT
 		uart_printf("scrollDown WRAPPED_TILE_MOVEPTR_DOWN\n");
@@ -959,7 +980,7 @@ void scrollDown()
 		if (horizontalScrollBlitTile.dest == topLeft.dest || horizontalScrollBlitTile.dest == topRight.dest)
 		{
 			//horizontalScrollBlitTile.isActive=0;
-			processMovingTile(&horizontalScrollBlitTile);
+			processHorizontalMovingTile(&horizontalScrollBlitTile);
 #ifdef DEBUG_PRINT
 			uart_printf("horizontalScrollBlitTile abgeschaltet\n");
 #endif
@@ -980,7 +1001,7 @@ void scrollDown()
 #endif
 				}
 
-				processMovingTile(&verticalScrollBlitTile);
+				processVerticalMovingTile(&verticalScrollBlitTile);
 			}
 		}
 	}
@@ -1002,7 +1023,7 @@ void scrollLeft()
 		return;
 
 #ifdef DEBUG_SCROLL_RUNTIME
-	custom.color[0] = 0x00F0;
+	custom.color[0] = 0x0070;
 #endif
 
 	scrollX--;
@@ -1022,7 +1043,6 @@ void scrollLeft()
 		uart_printf("scrollLeft horizontalScrollBlitTile init\n");
 #endif
 
-		topLeftMapTile--;
 		lastFetchWord--;
 		firstFetchWord--;
 
@@ -1055,6 +1075,8 @@ void scrollLeft()
 
 		horizontalScrollBlitTile.dest = topLeft.dest;
 		horizontalScrollBlitTile.tile = topLeft.tile;
+		horizontalScrollBlitTile.x = topLeft.x;
+		horizontalScrollBlitTile.y = topLeft.y;
 
 		horizontalScrollBlitTile.destStep = FRAMEBUFFER_LINE_PITCH/2*16;
 		horizontalScrollBlitTile.tileStep = LEVELMAP_WIDTH;
@@ -1077,7 +1099,7 @@ void scrollLeft()
 					uart_printf("horizontalScrollBlitTile abgeschaltet\n");
 #endif
 				}
-				processMovingTile(&horizontalScrollBlitTile);
+				processHorizontalMovingTile(&horizontalScrollBlitTile);
 			}
 		}
 	}
@@ -1102,7 +1124,7 @@ void scrollRight()
 		return;
 
 #ifdef DEBUG_SCROLL_RUNTIME
-	custom.color[0] = 0x00F0;
+	custom.color[0] = 0x0070;
 #endif
 
 	scrollX++;
@@ -1123,6 +1145,8 @@ void scrollRight()
 #endif
 		horizontalScrollBlitTile.dest = topRight.dest;
 		horizontalScrollBlitTile.tile = topRight.tile;
+		horizontalScrollBlitTile.x = topRight.x;
+		horizontalScrollBlitTile.y = topRight.y;
 
 		horizontalScrollBlitTile.destStep = FRAMEBUFFER_LINE_PITCH/2*16;
 		horizontalScrollBlitTile.tileStep = LEVELMAP_WIDTH;
@@ -1137,7 +1161,6 @@ void scrollRight()
 #ifdef DEBUG_PRINT
 		uart_printf("scrollRight TILE_MOVEPTR_RIGHT\n");
 #endif
-		topLeftMapTile++;
 		lastFetchWord++;
 		firstFetchWord++;
 
@@ -1153,7 +1176,7 @@ void scrollRight()
 			//verticalScrollBlitTile.isActive=0;
 			//verticalScrollBlitTile.dest++;
 			//verticalScrollBlitTile.tile++;
-			processMovingTile(&verticalScrollBlitTile);
+			processVerticalMovingTile(&verticalScrollBlitTile);
 
 #ifdef DEBUG_PRINT
 			uart_printf("if (verticalScrollBlitTile.dest == topLeft.dest || verticalScrollBlitTile.dest == bottomLeft.dest)\n");
@@ -1175,7 +1198,7 @@ void scrollRight()
 					uart_printf("horizontalScrollBlitTile abgeschaltet\n");
 #endif
 				}
-				processMovingTile(&horizontalScrollBlitTile);
+				processHorizontalMovingTile(&horizontalScrollBlitTile);
 			}
 		}
 	}
@@ -1223,7 +1246,7 @@ int verifyVisibleWindow()
 	int x,y;
 	//uart_printf("verifyVisibleWindow %d\n", scrollYLine);
 	volatile uint16_t *dest=firstFetchWord + ((scrollYLine&~0xf)-16) * FRAMEBUFFER_LINE_PITCH/2 + 1;
-	uint8_t *src = topLeftMapTile-LEVELMAP_WIDTH-1;
+	uint8_t *src;
 
 	dest = topLeft.dest + (FRAMEBUFFER_LINE_PITCH/2)*16 + 1;
 	src = topLeft.tile + LEVELMAP_WIDTH + 1;
@@ -1278,8 +1301,6 @@ void renderFullScreen()
 	scrollX&=~0xf;
 	scrollY&=~0xf;
 
-	topLeftMapTile = mapData + scrollX/16 + (scrollY/16)*LEVELMAP_WIDTH;
-
 	scrollXWord = (scrollX/16);
 
 	firstFetchWord = (uint16_t*)bitmap + scrollXWord - 1;
@@ -1290,16 +1311,24 @@ void renderFullScreen()
 	//topTileWord = bitmap + scrollX/16 + FRAMEBUFFER_LINE_PITCH/2*16;
 
 	topLeft.dest = firstFetchWord + (FRAMEBUFFER_LINE_PITCH/2)*16 + 1;
-	topLeft.tile = topLeftMapTile - LEVELMAP_WIDTH*1 - 1;
+	topLeft.tile = mapData + scrollX/16 + (scrollY/16)*LEVELMAP_WIDTH  - LEVELMAP_WIDTH*1 - 1;
+	topLeft.x = (scrollX/16) - 1;
+	topLeft.y = (scrollY/16) - 1;
 
 	topRight.dest = topLeft.dest + (FRAMEBUFFER_WIDTH/16) - 2;
 	topRight.tile = topLeft.tile + (FRAMEBUFFER_WIDTH/16) - 2;
+	topRight.x = topLeft.x + (FRAMEBUFFER_WIDTH/16) - 2;
+	topRight.y = topLeft.y;
 
 	bottomLeft.dest = topLeft.dest + (FRAMEBUFFER_LINE_PITCH/2)*16 * ((FRAMEBUFFER_HEIGHT/16)-2); //16 lassen wir wegen Übersicht
 	bottomLeft.tile = topLeft.tile + LEVELMAP_WIDTH*((FRAMEBUFFER_HEIGHT/16)-2);
+	bottomLeft.x = topLeft.x;
+	bottomLeft.y = topLeft.y + (FRAMEBUFFER_HEIGHT/16) - 2;;
 
 	bottomRight.dest = bottomLeft.dest + (FRAMEBUFFER_WIDTH/16) - 2;
 	bottomRight.tile = bottomLeft.tile + (FRAMEBUFFER_WIDTH/16) - 2;
+	bottomRight.x = bottomLeft.x + (FRAMEBUFFER_WIDTH/16) - 2;;
+	bottomRight.y = bottomLeft.y;
 
 	horizontalScrollBlitTile.isActive=0;
 	horizontalScrollBlitTile.dest=NULL;
@@ -1330,10 +1359,12 @@ void renderFullScreen()
 	custom.bplcon1=0;
 
 	uint16_t *dest=firstFetchWord + (FRAMEBUFFER_LINE_PITCH/2)*16 + 1;
-	uint8_t *src = topLeftMapTile-LEVELMAP_WIDTH-1;
+	uint8_t *src = topLeft.tile;
 
 	//src = mapData-1;
 #if 1
+	uint8_t tileX = topLeft.x;
+	uint8_t tileY = topLeft.y;
 
 	for (y=0; y<SCREEN_HEIGHT/16 + 2; y++) //2 extra Tiles für oben und unten
 	//for (y=0; y<3;y++)
@@ -1347,16 +1378,19 @@ void renderFullScreen()
 			uint8_t tileId = *src;
 			//uint8_t tileId = 0;
 
-			blitTile(tileId,dest);
+			blitTile(tileId,dest,tileX,tileY);
 
 			dest++; //ein Wort weiter nach rechts
 			src++;
+			tileX++;
 		}
 
 		//Wir sind nun am Rand angelangt. Das Wort nun per LINE Modulo auf den Anfang der nächsten Tile-Zeile gelegt
 
 		dest = lineStartDest + (FRAMEBUFFER_LINE_PITCH/2)*16 ;
 		src = lineStartSrc + LEVELMAP_WIDTH;
+		tileY++;
+		tileX = topLeft.x;
 	}
 
 #endif

@@ -9,6 +9,8 @@
 #define SRC_ASTAR_H_
 
 #include <stdint.h>
+#include <stdlib.h>
+
 extern "C"
 {
 #include "scrollEngine.h"
@@ -17,20 +19,21 @@ extern "C"
 
 struct node
 {
-	uint16_t posX;
-	uint16_t posY;
-	uint16_t costHeuristic;
-	uint16_t costYet;
-	uint16_t costSum;
-	uint16_t fromX;
-	uint16_t fromY;
+
+	uint8_t costHeuristic;
+	uint8_t costYet;
+	uint8_t costSum;
+	uint8_t fromX;
+	uint8_t fromY;
+	uint8_t posX;
+	uint8_t posY;
 	//bool closed;
 };
 
 struct waypoint
 {
-	uint16_t posX;
-	uint16_t posY;
+	uint8_t posX;
+	uint8_t posY;
 };
 
 #define MAX_WAYPOINT_ANZ 200
@@ -42,8 +45,10 @@ public:
 	int waypointsAnz;
 };
 
-#define OPEN_NODE_ANZ 500
+#define OPEN_NODE_ANZ 180
 #define CLOSED_NODE_ANZ 1400
+
+#define PATHES_ANZ 8
 
 class AStar
 {
@@ -52,8 +57,8 @@ public:
 	virtual ~AStar();
 
 	static void init();
-	bool findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, AStarPath &path);
-	bool findWayToTileType(int16_t startX, int16_t startY, char targetTileIdMin, char targetTileIdMax, AStarPath &path);
+	bool findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, AStarPath **path);
+	bool findWayToTileType(int16_t startX, int16_t startY, char targetTileIdMin, char targetTileIdMax, AStarPath **path);
 	void visualize();
 
 private:
@@ -64,7 +69,18 @@ private:
 	struct node closedNodes[CLOSED_NODE_ANZ];
 	struct node* nodeMap[LEVELMAP_HEIGHT*LEVELMAP_WIDTH];
 
-	static bool tilePassable[30];
+	AStarPath pathes[PATHES_ANZ];
+
+	AStarPath *getFreePath()
+	{
+		for(auto &path : pathes)
+		{
+			if (path.waypointsAnz==0)
+				return &path;
+		}
+		return NULL;
+	}
+
 };
 
 #endif /* SRC_ASTAR_H_ */

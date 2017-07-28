@@ -24,6 +24,8 @@ struct assets
 	uint16_t tank0_5[156 / 2];
 	uint16_t tank0_6[144 / 2];
 	uint16_t tank0_7[144 / 2];
+	uint16_t buildYesTile[192 / 2];
+	uint16_t buildNoTile[192 / 2];
 };
 
 extern struct assets *assets;

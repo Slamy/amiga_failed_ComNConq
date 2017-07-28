@@ -17,6 +17,8 @@ extern "C"
 #include <string.h>
 #include <math.h>
 
+#include "game.h"
+
 
 //#define DEBUG
 
@@ -31,16 +33,10 @@ AStar::~AStar()
 	// TODO Auto-generated destructor stub
 }
 
-bool AStar::tilePassable[30];
 
 void AStar::init()
 {
-	memset(tilePassable, 0, sizeof(tilePassable));
-	tilePassable[1] = true; //Land
-	tilePassable[2] = true; //Irgendwie verkohltes Land
-	tilePassable[25] = true; //Erz1
-	tilePassable[26] = true; //Erz2
-	tilePassable[27] = true; //Raffinerie-Platz
+
 }
 
 
@@ -62,7 +58,7 @@ void AStar::visualize()
 				else
 					c = 'O';
 			}
-			else if (tilePassable[mapData[y * LEVELMAP_WIDTH + x]] == false)
+			else if (Game::tilePassable[mapData[y * LEVELMAP_WIDTH + x]] == false)
 				c = '#';
 
 			//c = mapData[y * LEVELMAP_WIDTH + x] + '0';
@@ -74,7 +70,7 @@ void AStar::visualize()
 
 }
 
-static const int16_t newPosXTable[]={
+static const int8_t newPosXTable[]={
 		1,	//East
 		0,	//South
 		-1,	//West
@@ -87,7 +83,7 @@ static const int16_t newPosXTable[]={
 
 };
 
-static const int16_t newPosYTable[]={
+static const int8_t newPosYTable[]={
 		0, //East
 		1, //South
 		0, //West
@@ -99,14 +95,17 @@ static const int16_t newPosYTable[]={
 		1,
 };
 
-//#define COST_FUNCTION(X1,X2,Y1,Y2) abs(X1 - X2) + abs(Y1 - Y2)
+#define NUMBER_EDGES	4
+#define COST_ORTHO		1
+#define COST_DIAGONAL	1
+#define COST_FUNCTION(X1,X2,Y1,Y2) abs(X1 - X2) + abs(Y1 - Y2)
 
-#define COST_ORTHO		100
-#define COST_DIAGONAL	141
+//#define NUMBER_EDGES	8
+//#define COST_ORTHO		100
+//#define COST_DIAGONAL	141
+//#define COST_FUNCTION(X1,X2,Y1,Y2) sqrt(((X1 - X2)*(X1 - X2) + (Y1 - Y2)*(Y1 - Y2))*COST_ORTHO ) //FIXME Optimieren?
 
-#define COST_FUNCTION(X1,X2,Y1,Y2) sqrt(((X1 - X2)*(X1 - X2) + (Y1 - Y2)*(Y1 - Y2))*COST_ORTHO ) //FIXME Optimieren?
-
-static const int16_t newPosCostTable[]={
+static const uint8_t newPosCostTable[]={
 		COST_ORTHO,
 		COST_ORTHO,
 		COST_ORTHO,
@@ -120,7 +119,7 @@ static const int16_t newPosCostTable[]={
 
 
 
-bool AStar::findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, AStarPath &path)
+bool AStar::findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, AStarPath **path)
 {
 	memset(nodeMap, 0, sizeof(nodeMap));
 
@@ -135,11 +134,18 @@ bool AStar::findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, 
 
 	nodeMap[startY * LEVELMAP_WIDTH + startX] = &openNodes[0];
 	int16_t i;
-	path.waypointsAnz = 0;
 
 	struct node* endPtr = NULL;
 
-	if (tilePassable[mapData[endY * LEVELMAP_WIDTH + endX]] == false)
+	//Wenn der path bereits Speicher allokiert hat, entferne diesen.
+	if (*path)
+	{
+		(*path)->waypointsAnz=0;
+	}
+
+	*path = NULL;
+
+	if (Game::tilePassable[mapData[endY * LEVELMAP_WIDTH + endX]] == false)
 		return false;
 
 	for (;;)
@@ -206,14 +212,14 @@ bool AStar::findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, 
 
 		//Erzeugen wir nun maximal 4 weitere open nodes in seiner Nähe
 
-		for (i = 0; i < 8; i++)
+		for (i = 0; i < NUMBER_EDGES; i++)
 		{
-			uint16_t newX = workNode->posX + newPosXTable[i];
-			uint16_t newY = workNode->posY + newPosYTable[i];
+			int16_t newX = workNode->posX + newPosXTable[i];
+			int16_t newY = workNode->posY + newPosYTable[i];
 
 			//Teste, ob diese Position überhaupt möglich ist.
 
-			if ( newY>= 0 && newX >= 0 && tilePassable[mapData[newY * LEVELMAP_WIDTH + newX]] == true && Game::Unit::unitAt(newX, newY)==NULL)
+			if ( newY>= 0 && newX >= 0 && Game::tilePassable[mapData[newY * LEVELMAP_WIDTH + newX]] == true && Game::unitpool.unitAt(newX, newY)==NULL)
 			{
 				uint16_t newCostHeuristic = COST_FUNCTION(newX,endX,newY,endY);
 				uint16_t newCostSum = newCostHeuristic + workNode->costYet + newPosCostTable[i];
@@ -275,24 +281,26 @@ bool AStar::findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, 
 
 	if (endPtr)
 	{
-		struct waypoint* waypoints = path.waypoints;
+		*path = getFreePath();
+		uart_assert(path);
+		struct waypoint* waypoints = (*path)->waypoints;
 		for(;;)
 		{
 #ifdef DEBUG
 			uart_printf(" %d %d\n", endPtr->posX, endPtr->posY);
 #endif
 
-			if (path.waypointsAnz >= MAX_WAYPOINT_ANZ)
+			if ((*path)->waypointsAnz >= MAX_WAYPOINT_ANZ)
 			{
 				uart_printf("findway failed. overflow of waypoints\n");
-				path.waypointsAnz = 0;
+				(*path)->waypointsAnz = 0;
 				return false;
 			}
 
 			waypoints->posX=endPtr->posX;
 			waypoints->posY=endPtr->posY;
 			waypoints++;
-			path.waypointsAnz++;
+			(*path)->waypointsAnz++;
 
 
 			if (endPtr->posX == startX && endPtr->posY == startY)
@@ -307,7 +315,7 @@ bool AStar::findWay(int16_t startX, int16_t startY, int16_t endX, int16_t endY, 
 }
 
 
-bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdMin, char targetTileIdMax, AStarPath &path)
+bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdMin, char targetTileIdMax, AStarPath **path)
 {
 	memset(nodeMap, 0, sizeof(nodeMap));
 
@@ -318,11 +326,20 @@ bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdM
 	openNodesAnz = 1;
 	closedNodesAnz = 0;
 
+	uart_assert((startY * LEVELMAP_WIDTH + startX) < (LEVELMAP_HEIGHT*LEVELMAP_WIDTH));
 	nodeMap[startY * LEVELMAP_WIDTH + startX] = &openNodes[0];
 	int16_t i;
 
 	struct node* endPtr = NULL;
-	path.waypointsAnz = 0;
+
+	//Wenn der path bereits Speicher allokiert hat, entferne diesen.
+	if (*path)
+	{
+		(*path)->waypointsAnz=0;
+	}
+
+	*path = NULL;
+
 	for (;;)
 	{
 		//Wir suchen nun nach dem openNode der am wenigsten zurückgelegt hat. Wir nehmen an, es ist der 1. und suchen nach besseren
@@ -338,6 +355,8 @@ bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdM
 				openNodes[i].costSum
 				);
 #endif
+
+		uart_assert(openNodesAnz <= OPEN_NODE_ANZ);
 
 		for (i = 1; i < openNodesAnz; i++)
 		{
@@ -356,6 +375,8 @@ bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdM
 			}
 		}
 
+		uart_assert(bestOpenNode < OPEN_NODE_ANZ);
+
 		//Wir haben nun den besten Open Node.
 
 		//Füge diesen Knoten der Closed List hinzu
@@ -367,8 +388,10 @@ bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdM
 			return false;
 		}
 
+		uart_assert(closedNodesAnz < CLOSED_NODE_ANZ);
 		closedNodes[closedNodesAnz] = openNodes[bestOpenNode];
 		struct node* workNode = &closedNodes[closedNodesAnz];
+		uart_assert(workNode->posY * LEVELMAP_WIDTH + workNode->posX < LEVELMAP_WIDTH * LEVELMAP_HEIGHT);
 		nodeMap[workNode->posY * LEVELMAP_WIDTH + workNode->posX] = workNode;
 		closedNodesAnz++;
 
@@ -389,13 +412,16 @@ bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdM
 
 		for (i = 0; i < 4; i++)
 		{
-			uint16_t newX = workNode->posX + newPosXTable[i];
-			uint16_t newY = workNode->posY + newPosYTable[i];
+			int16_t newX = workNode->posX + newPosXTable[i];
+			int16_t newY = workNode->posY + newPosYTable[i];
 
 			//Teste, ob diese Position überhaupt möglich ist.
 
-			if ( newY>= 0 && newX >= 0 && tilePassable[mapData[newY * LEVELMAP_WIDTH + newX]] == true && Game::Unit::unitAt(newX, newY)==NULL)
+			if ( newY>= 0 && newX >= 0 && Game::tilePassable[mapData[newY * LEVELMAP_WIDTH + newX]] == true && Game::unitpool.unitAt(newX, newY)==NULL)
 			{
+				uart_assert(newX < LEVELMAP_WIDTH);
+				uart_assert(newY < LEVELMAP_HEIGHT);
+
 				uint16_t newCostYet = workNode->costYet + 1;
 
 				//Gibt es schon einen Node auf diesem Feld?
@@ -419,6 +445,8 @@ bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdM
 					}
 					ptr = &openNodes[openNodesAnz];
 					openNodesAnz++;
+
+					uart_assert(newY * LEVELMAP_WIDTH + newX < LEVELMAP_WIDTH * LEVELMAP_HEIGHT);
 					nodeMap[newY * LEVELMAP_WIDTH + newX] = ptr;
 #ifdef DEBUG
 					uart_printf("Neuer Open Node %d %d  %d \n",newX, newY,
@@ -441,7 +469,10 @@ bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdM
 		//entferne den gewählten bestOpenNode aus den open nodes
 
 		if (bestOpenNode != openNodesAnz - 1) // wenn nicht schon der letzte in der Liste ...
+		{
+			uart_assert(bestOpenNode < OPEN_NODE_ANZ);
 			openNodes[bestOpenNode] = openNodes[openNodesAnz - 1]; //schiebe den letzten zur aktuellen Position, um zu entfernen.
+		}
 		openNodesAnz--;
 
 	}
@@ -451,24 +482,26 @@ bool AStar::findWayToTileType(int16_t startX, int16_t startY, char targetTileIdM
 
 	if (endPtr)
 	{
-		struct waypoint* waypoints = path.waypoints;
+		*path = getFreePath();
+		uart_assert(path);
+		struct waypoint* waypoints = (*path)->waypoints;
 		for(;;)
 		{
 #ifdef DEBUG
 			uart_printf(" %d %d\n", endPtr->posX, endPtr->posY);
 #endif
 
-			if (path.waypointsAnz >= MAX_WAYPOINT_ANZ)
+			if ((*path)->waypointsAnz >= MAX_WAYPOINT_ANZ)
 			{
 				uart_printf("findway failed. overflow of waypoints\n");
-				path.waypointsAnz = 0;
+				(*path)->waypointsAnz = 0;
 				return false;
 			}
 
 			waypoints->posX=endPtr->posX;
 			waypoints->posY=endPtr->posY;
 			waypoints++;
-			path.waypointsAnz++;
+			(*path)->waypointsAnz++;
 
 
 			if (endPtr->posX == startX && endPtr->posY == startY)

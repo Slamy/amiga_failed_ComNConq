@@ -11,7 +11,7 @@
 
 void uart_printf ( const char * format, ... );
 void uart_printChar(char c);
-void uart_puts(char *str);
+void uart_puts(const char *str);
 
 #define uart_assert(cond) \
 	if (!(cond)) \

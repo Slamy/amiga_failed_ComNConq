@@ -776,5 +776,52 @@ int main()
 
 
 
+void blitTile(uint8_t tileid, uint16_t *dest, int8_t x, int8_t y)
+{
+	uint16_t *src = assets->tilemap + SCREEN_DEPTH * 16 * tileid;
+	//uart_printf("b %p %p\n",dest, src);
+#if 1
+	while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter
+
+	custom.bltcon0 = BC0F_SRCA | A_TO_D | BC0F_DEST;
+	custom.bltapt = src;
+	custom.bltdpt = dest;
+	custom.bltamod = 0;
+	custom.bltdmod = (FRAMEBUFFER_WIDTH - 16)/8;
+	custom.bltafwm = 0xffff;
+	custom.bltalwm = 0xffff;
+	custom.bltsize = ((5*16) << HSIZEBITS) | 1; //starts blitter. 16 x 16 Pixel
+
+#else
+	int i;
+
+	if (dest < bitmap)
+		return;
+
+	for (i=0; i<5*16; i++)
+	{
+		if (dest < bitmap)
+		{
+			uart_printf("Illegale Speicheroperation dest < bitmap\n");
+			for(;;);
+		}
+		if (dest >= &bitmap[FRAMEBUFFER_SIZE/2])
+		{
+			uart_printf("Illegale Speicheroperation dest >= &bitmap[FRAMEBUFFER_SIZE/2]\n");
+			for(;;);
+		}
+
+		*dest = *src;
+		src++;
+		dest+=FRAMEBUFFER_WIDTH/16;
+	}
+#endif
+
+
+
+}
+
+
+
 
 

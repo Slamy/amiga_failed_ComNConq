@@ -62,8 +62,61 @@ void gameloop();
 namespace Game
 {
 
+bool tilePassable[30];
+
+const unsigned char buildingFootprint[]=
+{
+	0,1,1,0,
+	1,1,1,0,
+	1,1,1,1,
+	0,0,0,0
+};
+
+const unsigned char buildingAreaXLut[]=
+{
+	0,16,32,48,
+	0,16,32,48,
+	0,16,32,48,
+	0,16,32,48,
+};
+
+const unsigned char buildingAreaYLut[]=
+{
+	0,0,0,0,
+	16,16,16,16,
+	32,32,32,32,
+	48,48,48,48,
+};
+
 UnitPool unitpool;
 
+void visualizeBuildingArea(const uint8_t *buildingFootprint, int16_t tileX, int16_t tileY)
+{
+	int8_t x=0,y=0;
+
+	uint8_t *src = &mapData[tileX + LEVELMAP_WIDTH * tileY];
+	int8_t i=0;
+
+	tileX=tileX*16;
+	tileY=tileY*16;
+
+	for (y=0;y<4;y++)
+	{
+		for (x=0;x<4;x++)
+		{
+			if (*buildingFootprint)
+			{
+				uint16_t* graphic = tilePassable[*src] ? assets->buildYesTile : assets->buildNoTile;
+				//blitMaskedBob_mapCoordinate(graphic, tileX + (x<<4), tileY + (y<<4), 16, 16);
+				blitMaskedBob_mapCoordinate(graphic, tileX + buildingAreaXLut[i], tileY + buildingAreaYLut[i], 16, 16);
+			}
+			i++;
+			src++;
+			buildingFootprint++;
+		}
+		src+=(LEVELMAP_WIDTH-4);
+	}
+}
 
 void gameloop()
 {
@@ -75,6 +128,13 @@ void gameloop()
 
 	AStar::init();
 
+	memset(tilePassable, 0, sizeof(tilePassable));
+	tilePassable[1] = true; //Land
+	tilePassable[2] = true; //Irgendwie verkohltes Land
+	tilePassable[25] = true; //Erz1
+	tilePassable[26] = true; //Erz2
+	tilePassable[27] = true; //Raffinerie-Platz
+
 	Unit* selectedUnit = NULL;
 
 	new (unitpool) Harvester(3,3);
@@ -84,6 +144,9 @@ void gameloop()
 	new (unitpool) Tank(6,7);
 	new (unitpool) Harvester(6,8);
 	new (unitpool) Tank(16,20);
+
+	renderFullScreen();
+	constructCopperList();
 
 	//testUnit.walkTo(8,8);
 
@@ -96,8 +159,8 @@ void gameloop()
 	int16_t rightPressMouseCursorX=0;
 	int16_t rightPressMouseCursorY=0;
 
-	uart_printf("Available Chip Mem %d \n",AvailMem(MEMF_CHIP));
-	uart_printf("Available Fast Mem %d \n",AvailMem(MEMF_FAST));
+	uart_printf("Available Chip Mem %d before mainloop\n",AvailMem(MEMF_CHIP));
+	uart_printf("Available Fast Mem %d before mainloop\n",AvailMem(MEMF_FAST));
 
 	for(;;)
 	{
@@ -110,7 +173,7 @@ void gameloop()
 			{
 				if (selectedUnit->specialAction())
 				{
-					mt_soundfx(assets->sfx_ackno, sizeof(assets->sfx_ackno)/2, 322, 64);
+					mt_soundfx(assets->sfx_ackno, sizeof(assets->sfx_ackno)/2, 322, 40);
 				}
 			}
 
@@ -142,19 +205,19 @@ void gameloop()
 
 		if (mouseLeftClick && !mouseLeftClickLast)
 		{
-			uart_printf("Left Click %d %d %d %d\n", mouseCursorX, mouseCursorX,mouseTileX,mouseTileY);
+			//uart_printf("Left Click %d %d %d %d\n", mouseCursorX, mouseCursorX,mouseTileX,mouseTileY);
 
-			Unit *unitUnderCursor = Unit::unitAt(mouseTileX,mouseTileY);
+			Unit *unitUnderCursor = unitpool.unitAt(mouseTileX,mouseTileY);
 			if (unitUnderCursor)
 			{
 				selectedUnit = unitUnderCursor;
-				mt_soundfx(assets->sfx_await1, sizeof(assets->sfx_await1)/2, 322, 64);
+				mt_soundfx(assets->sfx_await1, sizeof(assets->sfx_await1)/2, 322, 40);
 			}
 			else if (selectedUnit)
 			{
 				if (selectedUnit->walkTo(mouseTileX,mouseTileY))
 				{
-					mt_soundfx(assets->sfx_ackno, sizeof(assets->sfx_ackno)/2, 322, 64);
+					mt_soundfx(assets->sfx_ackno, sizeof(assets->sfx_ackno)/2, 322, 40);
 				}
 			}
 
@@ -196,7 +259,7 @@ void gameloop()
 				mouseSpritePtr = assets->sprite_mouseCursor2;
 				setSpriteStruct(mouseSpritePtr,mouseCursorX-16/2, mouseCursorY-18/2, 18);
 			}
-			else if (Unit::unitAt(mouseTileX,mouseTileY))
+			else if (Game::unitpool.unitAt(mouseTileX,mouseTileY))
 			{
 				//auswählender Mauszeiger
 				mouseSpritePtr = assets->sprite_mouseCursor3;
@@ -221,10 +284,10 @@ void gameloop()
 
 			constructCopperList();
 
-			restoreBackground();
+			//restoreBackground();
 
 			int i;
-			for (i = 0; i < 40; i++)
+			for (i = 0; i < 16; i++)
 			{
 				if (toScrollY > 0)
 				{
@@ -251,11 +314,19 @@ void gameloop()
 				}
 			}
 
-			unitpool.simulate();
+			toScrollY=0;
+			toScrollX=0;
 
+			custom.color[0] = 0x0770;
+			unitpool.simulate();
+			custom.color[0] = 0x0000;
 			blitAlteredTiles();
 
-			unitpool.blit();
+			//unitpool.blit();
+
+			//visualizeBuildingArea(buildingFootprint,mouseTileX, mouseTileY);
+
+
 		}
 
 		mouseLeftClickLast = mouseLeftClick;
@@ -275,6 +346,15 @@ int main()
 	//maustest();
 	printf("Howdy %d!\n", 42);
 	uart_printf("Howdy %d!\n", 42);
+
+	printf("sizeof Game::UnitPool %d \n",sizeof(Game::UnitPool));
+	printf("sizeof Game::Unit %d \n",sizeof(Game::Unit));
+	printf("sizeof Astar %d \n",sizeof(AStar));
+	printf("sizeof AStarPath %d \n",sizeof(AStarPath));
+	printf("sizeof Harvester %d \n",sizeof(Harvester));
+
+	printf("Available Chip Mem %d \n",AvailMem(MEMF_CHIP));
+	printf("Available Fast Mem %d \n",AvailMem(MEMF_FAST));
 
 	uart_printf("Available Chip Mem %d \n",AvailMem(MEMF_CHIP));
 	uart_printf("Available Fast Mem %d \n",AvailMem(MEMF_FAST));
@@ -305,9 +385,6 @@ int main()
 
 	scrollX=0;
 	scrollY=0;
-
-	renderFullScreen();
-	constructCopperList();
 
 #if 1
 	mt_install_cia();
@@ -360,4 +437,82 @@ int main()
 	return 0;
 }
 
+
+
+void blitTile(uint8_t tileid, uint16_t *dest, int8_t x, int8_t y)
+{
+	/*
+	if (x<0)
+		return;
+	if (y<0)
+		return;
+	*/
+
+	uint16_t *src = assets->tilemap + SCREEN_DEPTH * 16 * tileid;
+	//uart_printf("b %p %p %d %d\n",dest, src,x,y);
+#if 1
+	while (custom.dmaconr & DMAF_BLTDONE); //warte auf blitter
+
+	custom.bltcon0 = BC0F_SRCA | A_TO_D | BC0F_DEST;
+	custom.bltapt = src;
+	custom.bltdpt = dest;
+	custom.bltamod = 0;
+	custom.bltdmod = (FRAMEBUFFER_WIDTH - 16)/8;
+	custom.bltafwm = 0xffff;
+	custom.bltalwm = 0xffff;
+	custom.bltsize = ((5*16) << HSIZEBITS) | 1; //starts blitter. 16 x 16 Pixel
+
+#else
+	int i;
+
+	if (dest < bitmap)
+		return;
+
+	for (i=0; i<5*16; i++)
+	{
+		if (dest < bitmap)
+		{
+			uart_printf("Illegale Speicheroperation dest < bitmap\n");
+			for(;;);
+		}
+		if (dest >= &bitmap[FRAMEBUFFER_SIZE/2])
+		{
+			uart_printf("Illegale Speicheroperation dest >= &bitmap[FRAMEBUFFER_SIZE/2]\n");
+			for(;;);
+		}
+
+		*dest = *src;
+		src++;
+		dest+=FRAMEBUFFER_WIDTH/16;
+	}
+#endif
+
+
+	if (x>=0 && y>=0)
+	{
+		Game::Unit *u = Game::unitpool.unitAt(x,y);
+		if (u)
+		{
+			uart_printf("%d %d present\n", x,y);
+			u->blit();
+		}
+	}
+
+}
+
+
+
+//Sorgt dafür, dass exception demangling nicht eingelinkt wird!
+//https://developer.mbed.org/forum/platform-32-ST-Nucleo-L152RE-community/topic/4802/?page=2#comment-25593
+namespace __gnu_cxx {
+    void __verbose_terminate_handler() {
+    	uart_puts((const char*)"NOOO1!!\n");
+    	for(;;);
+    }
+}
+extern "C" void __cxa_pure_virtual(void);
+extern "C" void __cxa_pure_virtual(void) {
+	uart_puts((const char*)"NOOO2!!\n");
+	for(;;);
+}
 
