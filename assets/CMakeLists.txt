@@ -26,6 +26,9 @@ add_custom_command (OUTPUT assets.bin
 	COMMAND gifsicle --crop 64,115+16x12	< ${CMAKE_CURRENT_SOURCE_DIR}/graphics.gif > tank0_6.gif
 	COMMAND gifsicle --crop 80,115+16x12	< ${CMAKE_CURRENT_SOURCE_DIR}/graphics.gif > tank0_7.gif
 	
+	COMMAND gifsicle --crop 80,16+16x16		< ${CMAKE_CURRENT_SOURCE_DIR}/graphics.gif > buildYesTile.gif
+	COMMAND gifsicle --crop 80,32+16x16		< ${CMAKE_CURRENT_SOURCE_DIR}/graphics.gif > buildNoTile.gif
+	
 	COMMAND ../tools/gifToPlanar gifTileMap16ToILBM tilemap_tiled.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette.txt 5 tilemap.bin
 	COMMAND ../tools/gifToPlanar gifToSprite sprite_mouse1.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette_sprite01.txt sprite_mouse1.bin
 	COMMAND ../tools/gifToPlanar gifToSprite sprite_mouse2.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette_sprite01.txt sprite_mouse2.bin
@@ -37,6 +40,9 @@ add_custom_command (OUTPUT assets.bin
 	COMMAND ../tools/gifToPlanar gifToMaskedACBM bobunit0_1.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette.txt 5 bobunit0_1.bin
 	COMMAND ../tools/gifToPlanar gifToMaskedACBM bobunit0_2.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette.txt 5 bobunit0_2.bin
 	COMMAND ../tools/gifToPlanar gifToMaskedACBM bobunit0_3.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette.txt 5 bobunit0_3.bin
+	
+	COMMAND ../tools/gifToPlanar gifToMaskedACBM buildYesTile.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette.txt 5 buildYesTile.bin
+	COMMAND ../tools/gifToPlanar gifToMaskedACBM buildNoTile.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette.txt 5 buildNoTile.bin
 	
 	COMMAND ../tools/gifToPlanar gifToMaskedACBM tank0_0.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette.txt 5 tank0_0.bin
 	COMMAND ../tools/gifToPlanar gifToMaskedACBM tank0_1.gif ${CMAKE_CURRENT_SOURCE_DIR}/palette.txt 5 tank0_1.bin
@@ -65,6 +71,8 @@ add_custom_command (OUTPUT assets.bin
 		bobunit0_2.bin
 		bobunit0_3.bin
 		tank0_*.bin
+		buildYesTile.bin
+		buildNoTile.bin
 		> assets.bin
 	
 	COMMAND ls -lh assets.bin
