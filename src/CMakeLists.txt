@@ -29,17 +29,28 @@ SET(CMAKE_CXX_LINK_FLAGS " -nodefaultlibs  -mcrt=nix13 -m68000 -Wl,-Map=cxxoutpu
 
 
 #Vermeidet -rdynamic
-set(CMAKE_C_LINK_EXECUTABLE "<CMAKE_C_COMPILER>  <FLAGS> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET>")
-set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER>  <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> \
+set(CMAKE_C_LINK_EXECUTABLE "<CMAKE_C_COMPILER>  <FLAGS> <CMAKE_C_LINK_FLAGS> <OBJECTS>  -o <TARGET>")
+set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER>  <FLAGS> <CMAKE_CXX_LINK_FLAGS> <OBJECTS>  -o <TARGET> \
 	-lnixmain -lstdc++ -lnix -lamiga -lgcc -lm -lnix13 -lgcc -lnix")
 
 #set(CMAKE_C_LINK_EXECUTABLE "vc  <FLAGS> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET>")
 
 #SET(CMAKE_C_LINKER  vlink)
 
-enable_language(ASM-VASM)
-SET(CMAKE_ASM-VASM_FLAGS " -Faout -quiet -x -m68000 -spaces -showopt ")
 
+add_custom_command(
+	OUTPUT asmstuff.o
+	COMMAND vasm -Faout -quiet -x -m68000 -spaces -showopt  -o asmstuff.o ${CMAKE_CURRENT_SOURCE_DIR}/hardware/asmstuff.s
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/hardware/asmstuff.s
+	
+)
+
+add_custom_command(
+	OUTPUT ptplayer_noa4.o
+	COMMAND vasm -Faout -quiet -x -m68000 -spaces -showopt  -o ptplayer_noa4.o ${CMAKE_CURRENT_SOURCE_DIR}/ptplayer/ptplayer_noa4.s
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/ptplayer/ptplayer_noa4.s
+	
+)
 
 add_executable (tilescrollTest
 	tileScrollTest.c
@@ -47,8 +58,8 @@ add_executable (tilescrollTest
 	hardware/uart.c
 	assets.c
 	hardware/input.c
-	hardware/asmstuff.s
-	ptplayer/ptplayer_noa4.s
+	asmstuff.o
+	ptplayer_noa4.o
 	ptplayer/ptplayerWrapper.c
 	../assets/leveldata.c
 	)
@@ -65,8 +76,8 @@ add_executable (game
 	hardware/uart.c
 	assets.c
 	hardware/input.c
-	hardware/asmstuff.s
-	ptplayer/ptplayer_noa4.s
+	asmstuff.o
+	ptplayer_noa4.o
 	ptplayer/ptplayerWrapper.c
 	../assets/leveldata.c
 	)
