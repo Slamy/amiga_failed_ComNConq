@@ -21,7 +21,7 @@ cmake ../amiga_failed_ComNConq
 make
 ```
 
-The resulting binary is game.
+The resulting binary is game inside src.
 
 How to play:
 
@@ -29,3 +29,7 @@ Press and hold the right mouse button to activate scroll.
 Select a "rotating crystal harvester" with the left mouse and press H on the keyboard. It will start harvesting.
 The "tanks" can be controlled as well.
 
+
+Disclaimer:
+This software is provided AS IS. If it damages your Amiga our attached hardware in any way it's your fault for executing it.
+The music used in this game is from STune and is called "Aliens on Earth". Copyright infrigement is not intented. The rights of this song belongs to the original author of that game.
